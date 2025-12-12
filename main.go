@@ -7,12 +7,12 @@ import (
 	"v/service"
 )
 
+
 func main() {
 	args := os.Args[1:]
 
 	if len(args) == 0 {
-		println("No arguments provided")
-		return
+		args = []string{"-h"}
 	}
 	firstArg := args[0]
 	stat, _ := os.Stdin.Stat()
