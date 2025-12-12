@@ -1,6 +1,9 @@
 package service
 
-import plugin_json2excel "v/plugin/json2excel"
+import (
+	plugin_json2excel "v/plugin/json2excel"
+	plugin_tt "v/plugin/tt"
+)
 
 type PluginTemplate interface {
 	Init() error
@@ -30,6 +33,7 @@ func (p *Plugin) Info(pl PluginTemplate) string {
 func (p Plugin) List() []PluginTemplate {
 	list := []PluginTemplate{
 		&(plugin_json2excel.Json2Excel{}),
+		&(plugin_tt.TT{}),
 	}
 	for _, v := range list {
 		v.Init()

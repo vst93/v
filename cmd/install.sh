@@ -3,7 +3,7 @@
 set -e
 
 # 配置信息
-VERSION="0.0.1"
+VERSION="0.0.2"
 REPO="https://github.com/vst93/v"
 BINARY_NAME="v"
 TEMP_DIR=$(mktemp -d)

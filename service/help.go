@@ -7,7 +7,7 @@ var VVersion = "0.0.2"
 func Help() string {
 	pluginList := Plugin{}
 
-	out := "v -  Gadgets under the terminal\nVersion: " + VVersion + "\n\n"
+	out := "v - Gadgets under the terminal\nVersion: " + VVersion + "\nHomepage: https://github.com/vst93/v" + "\n\n"
 	out += "Plugins:\n"
 	for _, plugin := range pluginList.List() {
 		out += "-------------------\n"

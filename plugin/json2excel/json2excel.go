@@ -17,7 +17,7 @@ type Json2Excel struct {
 func (j *Json2Excel) Init() error {
 	j.name = "json2excel"
 	j.version = "0.0.1"
-	j.description = "This plugin can convert json data to excel file."
+	j.description = "convert json data to excel file"
 	j.command = "json2excel"
 	j.args = map[string]string{
 		"-i":        "input file path",
