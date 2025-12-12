@@ -50,7 +50,7 @@ func (j *Json2Excel) GetAuthor() string {
 }
 
 func (j *Json2Excel) Run(args []string) error {
-	fmt.Println(args)
+	// fmt.Println(args)
 	inputPath := ""
 	outputPath := ""
 	expand := true
