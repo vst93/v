@@ -112,22 +112,22 @@ get_download_info() {
     
     case "$os-$arch" in
         darwin-arm64)
-            FILENAME="lazyrdm-darwin-arm64.zip"
+            FILENAME="v-darwin-arm64.zip"
             ;;
         darwin-amd64)
-            FILENAME="lazyrdm-darwin-amd64.zip"
+            FILENAME="v-darwin-amd64.zip"
             ;;
         linux-arm64)
-            FILENAME="lazyrdm-linux-arm64.zip"
+            FILENAME="v-linux-arm64.zip"
             ;;
         linux-amd64)
-            FILENAME="lazyrdm-linux-amd64.zip"
+            FILENAME="v-linux-amd64.zip"
             ;;
         android-arm64)
-            FILENAME="lazyrdm-android-arm64.zip"
+            FILENAME="v-android-arm64.zip"
             ;;
         android-amd64)
-            FILENAME="lazyrdm-android-amd64.zip"
+            FILENAME="v-android-amd64.zip"
             ;;
         *)
             echo "没有找到适用于 $os-$arch 的版本"

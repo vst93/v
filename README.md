@@ -5,9 +5,9 @@ Gadgets under the terminal
 ``` bash
 # brew 
 # install 
-brew install vst93/tap/lazyrdm
+brew install vst93/tap/v
 # uninstall 
-brew uninstall lazyrdm
+brew uninstall v
 
 
 # shell 
