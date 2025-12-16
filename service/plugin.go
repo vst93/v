@@ -2,6 +2,7 @@ package service
 
 import (
 	plugin_json2excel "v/plugin/json2excel"
+	plugin_translate "v/plugin/translate"
 	plugin_tt "v/plugin/tt"
 )
 
@@ -34,6 +35,7 @@ func (p Plugin) List() []PluginTemplate {
 	list := []PluginTemplate{
 		&(plugin_json2excel.Json2Excel{}),
 		&(plugin_tt.TT{}),
+		&(plugin_translate.Tr{}),
 	}
 	for _, v := range list {
 		v.Init()
