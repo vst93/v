@@ -2,7 +2,7 @@ package service
 
 import "strings"
 
-var VVersion = "0.0.2"
+var VVersion = "0.0.3"
 
 func Help() string {
 	pluginList := Plugin{}
