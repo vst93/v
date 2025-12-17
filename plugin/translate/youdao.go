@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/gookit/ini/v2"
 )
 
 // WordInfo 存储单词信息
@@ -234,7 +236,7 @@ func DisplayWordInfo(wordInfo *WordInfo) {
 	// fmt.Printf("%s%s%s\n", BoldCyan, strings.Repeat("=", 60), Reset)
 
 	// 显示单词
-	fmt.Printf("%s单词:%s %s%s%s\n", BoldGreen, Reset, BoldYellow, wordInfo.Word, Reset)
+	fmt.Printf("%s输入:%s %s%s%s\n", BoldGreen, Reset, BoldYellow, wordInfo.Word, Reset)
 	// 显示发音
 	if wordInfo.UkPhonetic != "" {
 		fmt.Printf("%s发音:%s", BoldGreen, Reset)
@@ -315,6 +317,33 @@ func Search(word string) {
 	// fmt.Printf("%s查询单词: %s%s%s\n", Bold, Green, word, Reset)
 	DisplaySeparator()
 
+	// 并发请求谷歌和CNKI翻译
+	chanList := make(chan bool, 2)
+
+	go func() {
+		if ini.String("translate.tr_google") != "disable" {
+			// 谷歌翻译
+			googleTrans, err := GoogleTranslate(word)
+			if err != nil {
+				DisplayError("谷歌翻译失败", err)
+			}
+			DisplayTranslation(word, googleTrans, "")
+		}
+		chanList <- true
+	}()
+	go func() {
+		if ini.String("translate.tr_cnki") != "disable" {
+			// CNKI翻译
+			cnkiTrans, err := CNKITranslate(word)
+			if err != nil {
+				DisplayError("CNKI翻译失败", err)
+			}
+			DisplayTranslation(word, "", cnkiTrans)
+		}
+
+		chanList <- true
+	}()
+
 	// 查询单词信息
 	// DisplayLoading("正在查询有道词典")
 	wordInfo, err := SearchWord(word)
@@ -327,29 +356,6 @@ func Search(word string) {
 
 	// 显示单词信息
 	DisplayWordInfo(wordInfo)
-
-	// 并发请求谷歌和CNKI翻译
-	chanList := make(chan bool, 2)
-
-	go func() {
-		// 谷歌翻译
-		googleTrans, err := GoogleTranslate(word)
-		if err != nil {
-			DisplayError("谷歌翻译失败", err)
-		}
-		DisplayTranslation(word, googleTrans, "")
-		chanList <- true
-
-	}()
-	go func() {
-		// CNKI翻译
-		cnkiTrans, err := CNKITranslate(word)
-		if err != nil {
-			DisplayError("CNKI翻译失败", err)
-		}
-		DisplayTranslation(word, "", cnkiTrans)
-		chanList <- true
-	}()
 
 	// 等待所有翻译完成
 	for i := 0; i < 2; i++ {

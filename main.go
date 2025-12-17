@@ -5,12 +5,16 @@ import (
 	"io"
 	"os"
 	"v/service"
+	"v/setting"
 )
 
-
 func main() {
-	args := os.Args[1:]
+	var err error
 
+	// load settings
+	setting.InitSetting()
+
+	args := os.Args[1:]
 	if len(args) == 0 {
 		args = []string{"-h"}
 	}
@@ -31,7 +35,6 @@ func main() {
 	}
 
 	plugins := service.Plugin{}
-	var err error
 
 	for _, plugin := range plugins.List() {
 		if plugin.GetCommand() == firstArg {
