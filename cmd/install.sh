@@ -12,7 +12,6 @@ TEMP_DIR=$(mktemp -d)
 response=$(curl -s https://api.github.com/repos/vst93/$BINARY_NAME/releases/latest)
 # 提取下载链接 （tag_name属性即为版本号属性 cut命令获取版本号属性的值 awk命令把版本号中的v字符删除）
 VERSION=$(echo "$response" | grep 'tag_name' | cut -d'"' -f4)
-echo "最新版本: $VERSION"
 
 # 确定安装目录
 determine_install_dir() {
@@ -304,7 +303,7 @@ install_binary() {
 
 # 主安装流程
 main() {
-    echo "开始安装 $BINARY_NAME v$VERSION"
+    echo "开始安装 $BINARY_NAME $VERSION"
     
     # 确定安装目录
     INSTALL_DIR=$(determine_install_dir)
