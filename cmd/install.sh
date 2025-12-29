@@ -81,7 +81,7 @@ detect_platform() {
         Darwin)
             OS="darwin"
             ;;
-        Linux)
+        GNU/Linux)
             OS="linux"
             ;;
         Android)
