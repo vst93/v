@@ -1,38 +1,193 @@
-# v
-Gadgets under the terminal
+# v - Gadgets under the terminal
 
-### Install & Uninstall
-``` bash
-# brew 
-## install 
+A collection of useful command-line tools for developers. Built with Go, designed for productivity.
+
+## Features
+
+- **Cross-platform**: Works on macOS, Linux, and Windows
+- **Plugin architecture**: Easy to extend with new commands
+- **Pipeline support**: Works with stdin/stdout for seamless integration
+- **Clipboard integration**: Copy results with a single command
+
+## Installation
+
+### Homebrew (macOS)
+```bash
+# install
 brew install vst93/tap/v
-## uninstall 
+
+# uninstall
 brew uninstall v
+```
 
-# shell 
-## install 
+### Shell Script (Linux/macOS)
+```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vst93/v/refs/heads/main/cmd/install.sh)"
-
 ```
 
+### Manual Build
+```bash
+git clone https://github.com/vst93/v.git
+cd v
+go build -o v main.go
+./v -h
+```
 
-### Usage Examples
+## Available Commands
 
-``` bash    
-# json2excel - convert json data to excel file
-$ v json2excel -i 'xxxx/xxxx/xxx.xx'  -k 'data.list'
-$ v json2excel -c '{xxxxx}'
-$ curl xxxx | v json2excel -k 'data.list'
+### pwd - Print Working Directory
 
-# tt - provides mutual conversion of timestamp and date
+Print the current directory path and automatically copy it to clipboard.
+
+```bash
+$ v pwd
+📁 Current Directory:
+/Users/vst/Code/goProgram/v
+✅ Copied to clipboard
+```
+
+### tt - Timestamp Converter
+
+Provides mutual conversion between timestamps and human-readable dates.
+
+```bash
+# Current Unix timestamp (seconds)
 $ v tt
-`1641038400`
-$ v tt -m 
-`1765533341652`
-$ v tt '2022-01-01 12:00:00'
-`1641038400`
-$ v tt 1641038400
-`2022-01-01 20:00:00`
+1641038400
 
+# Current Unix timestamp (milliseconds)
+$ v tt -m
+1765533341652
+
+# Convert date string to timestamp
+$ v tt '2022-01-01 12:00:00'
+1641038400
+
+# Convert timestamp to date string
+$ v tt 1641038400
+2022-01-01 20:00:00
+```
+
+### json2excel - JSON to Excel Converter
+
+Convert JSON data to Excel (.xlsx) files with support for nested objects and key drilling.
+
+```bash
+# Convert JSON file to Excel
+$ v json2excel -i 'data/input.json' -k 'data.list'
+
+# Convert JSON string directly
+$ v json2excel -c '[{"name":"张三","age":25},{"name":"李四","age":30}]'
+
+# Use pipe input
+$ curl -s 'https://api.example.com/data' | v json2excel -k 'items'
+
+# Specify output path
+$ v json2excel -i 'data.json' -o '/custom/path/output.xlsx'
+
+# Keep nested JSON as strings (don't expand columns)
+$ v json2excel -i 'data.json' -unexpand
+```
+
+**json2excel options:**
+
+| Option | Description |
+|--------|-------------|
+| `-i` | Input file path |
+| `-c` | JSON content string (overrides `-i`) |
+| `-o` | Output file path (defaults to ~/Downloads) |
+| `-k` | Drill down key, use dot separator (e.g., `-k data.list.items`) |
+| `-unexpand` | Don't expand nested JSON objects to multiple columns |
+
+### tr - Text Translator
+
+Translate text using Google Translate or CNKI (requires internet connection).
+
+```bash
+# Translate text
+$ v tr 'Hello World'
+你好，世界
+
+# Enable/Disable Google Translate
+$ v -enable-google
+Google Translate enabled
+$ v -disable-google
+Google Translate disabled
+
+# Enable/Disable CNKI Translate
+$ v -enable-cnki
+Bing Translate enabled
+$ v -disable-cnki
+Bing Translate disabled
+```
+
+## Development
+
+### Project Structure
 
 ```
+v/
+├── main.go              # Entry point and plugin orchestration
+├── service/
+│   └── plugin.go        # Plugin registry and PluginTemplate interface
+├── plugin/
+│   ├── pwd/             # pwd command implementation
+│   ├── tt/              # timestamp converter implementation
+│   ├── json2excel/      # JSON to Excel converter
+│   └── translate/       # Translation service
+└── setting/
+    └── ini.go           # Configuration management
+```
+
+### Adding a New Plugin
+
+1. Create a new directory under `plugin/`
+2. Implement the `PluginTemplate` interface:
+
+```go
+type PluginTemplate interface {
+    Init() error
+    Run(args []string) error
+    Stop() error
+    GetName() string
+    GetVersion() string
+    GetDescription() string
+    GetCommand() string
+    GetArgs() map[string]string
+    GetAuthor() string
+}
+```
+
+3. Register your plugin in `service/plugin.go`
+
+### Build Commands
+
+```bash
+# Build for current platform
+go build -o v main.go
+
+# Build for all platforms
+GOOS=darwin GOARCH=amd64 go build -o v-darwin-amd64 main.go
+GOOS=darwin GOARCH=arm64 go build -o v-darwin-arm64 main.go
+GOOS=linux GOARCH=amd64 go build -o v-linux-amd64 main.go
+GOOS=windows GOARCH=amd64 go build -o v.exe main.go
+```
+
+### Testing
+
+```bash
+# Run all tests
+go test ./...
+
+# Run with coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
+```
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Author
+
+Created by vst93

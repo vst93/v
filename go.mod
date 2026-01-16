@@ -3,6 +3,8 @@ module v
 go 1.24.3
 
 require (
+	github.com/atotto/clipboard v0.1.4
+	github.com/gookit/ini/v2 v2.3.2
 	github.com/xuri/excelize/v2 v2.10.0
 	golang.org/x/text v0.30.0
 )
@@ -10,7 +12,6 @@ require (
 require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/gookit/goutil v0.7.1 // indirect
-	github.com/gookit/ini/v2 v2.3.2 // indirect
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.4 // indirect
 	github.com/tiendc/go-deepcopy v1.7.1 // indirect
