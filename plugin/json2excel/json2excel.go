@@ -26,7 +26,7 @@ func (j *Json2Excel) Init() error {
 		"-k":        "drill down key, use dot to separate keys, e.g. -k a.b.c",
 		"-unexpand": "do not expand json data to multiple columns",
 	}
-	j.author = "v"
+	j.author = "vst"
 	return nil
 }
 

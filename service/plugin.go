@@ -20,13 +20,34 @@ type PluginTemplate interface {
 	GetAuthor() string
 }
 
+type PluginInfo struct {
+	Name        string
+	Version     string
+	Author      string
+	Description string
+	Command     string
+	Args        map[string]string
+}
+
 type Plugin struct{}
 
+func (p *Plugin) GetInfo(pl PluginTemplate) PluginInfo {
+	return PluginInfo{
+		Name:        pl.GetName(),
+		Version:     pl.GetVersion(),
+		Author:      pl.GetAuthor(),
+		Description: pl.GetDescription(),
+		Command:     pl.GetCommand(),
+		Args:        pl.GetArgs(),
+	}
+}
+
 func (p *Plugin) Info(pl PluginTemplate) string {
-	out := pl.GetName() + " " + pl.GetVersion() + " by " + pl.GetAuthor() + "\n" + pl.GetDescription() + "\n"
-	out += "Command: \n  " + pl.GetCommand() + "\n"
+	info := p.GetInfo(pl)
+	out := info.Name + " " + info.Version + " by " + info.Author + "\n" + info.Description + "\n"
+	out += "Command: \n  " + info.Command + "\n"
 	out += "Args:\n"
-	for k, v := range pl.GetArgs() {
+	for k, v := range info.Args {
 		out += "  " + k + ": " + v + "\n"
 	}
 	return out

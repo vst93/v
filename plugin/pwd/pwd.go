@@ -22,7 +22,7 @@ func (p *Pwd) Init() error {
 	p.description = "print working directory and copy to clipboard"
 	p.command = "pwd"
 	p.args = map[string]string{}
-	p.author = "v"
+	p.author = "vst"
 	return nil
 }
 

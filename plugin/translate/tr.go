@@ -23,7 +23,7 @@ func (t *Tr) Init() error {
 	t.args = map[string]string{
 		"-[disable/enable]-[google/cnki]": "Disable/Enable Google Translate or Bing Translate",
 	}
-	t.author = ""
+	t.author = "vst"
 	return nil
 }
 

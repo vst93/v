@@ -22,7 +22,7 @@ func (t *TT) Init() error {
 	t.args = map[string]string{
 		"-m": "return millisecond timestamp",
 	}
-	t.author = "v"
+	t.author = "vst"
 	return nil
 }
 
