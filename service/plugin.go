@@ -2,6 +2,7 @@ package service
 
 import (
 	plugin_json2excel "v/plugin/json2excel"
+	plugin_jsonformat "v/plugin/jsonformat"
 	plugin_pwd "v/plugin/pwd"
 	plugin_translate "v/plugin/translate"
 	plugin_tt "v/plugin/tt"
@@ -56,6 +57,7 @@ func (p *Plugin) Info(pl PluginTemplate) string {
 func (p Plugin) List() []PluginTemplate {
 	list := []PluginTemplate{
 		&(plugin_json2excel.Json2Excel{}),
+		&(plugin_jsonformat.JsonFormat{}),
 		&(plugin_pwd.Pwd{}),
 		&(plugin_tt.TT{}),
 		&(plugin_translate.Tr{}),
