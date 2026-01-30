@@ -21,7 +21,7 @@ func (t *Tr) Init() error {
 	t.description = "Translate text (need internet connection)"
 	t.command = "tr"
 	t.args = map[string]string{
-		"-[disable/enable]-[google/cnki]": "Disable/Enable Google Translate or Bing Translate",
+		"-[disable/enable]-[google/cnki]": "Disable/Enable Google Translate or CNKI Translate",
 	}
 	t.author = "vst"
 	return nil
@@ -69,14 +69,14 @@ func (t *Tr) Run(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("Bing Translate disabled")
+		fmt.Println("CNKI Translate disabled")
 		return nil
 	case "-enable-cnki":
 		err := setting.Set("tr_cnki", "enable", "translate")
 		if err != nil {
 			return err
 		}
-		fmt.Println("Bing Translate enabled")
+		fmt.Println("CNKI Translate enabled")
 		return nil
 	default:
 	}

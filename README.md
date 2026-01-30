@@ -4,7 +4,7 @@ A collection of useful command-line tools for developers. Built with Go, designe
 
 ## Features
 
-- **Cross-platform**: Works on macOS, Linux, and Windows
+- **Cross-platform**: Works on macOS, Linux, Windows, and Android
 - **Plugin architecture**: Easy to extend with new commands
 - **Pipeline support**: Works with stdin/stdout for seamless integration
 - **Clipboard integration**: Copy results with a single command
@@ -116,9 +116,9 @@ Google Translate disabled
 
 # Enable/Disable CNKI Translate
 $ v -enable-cnki
-Bing Translate enabled
+CNKI Translate enabled
 $ v -disable-cnki
-Bing Translate disabled
+CNKI Translate disabled
 ```
 
 ## Development
@@ -128,6 +128,8 @@ Bing Translate disabled
 ```
 v/
 ├── main.go              # Entry point and plugin orchestration
+├── cmd/
+│   └── install.sh       # Installation script for Linux/macOS
 ├── service/
 │   └── plugin.go        # Plugin registry and PluginTemplate interface
 ├── plugin/
