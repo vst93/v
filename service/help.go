@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var VVersion = "0.0.4"
+var VVersion = "0.0.5"
 
 func Help() string {
 	pluginList := Plugin{}
