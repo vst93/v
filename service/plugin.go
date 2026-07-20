@@ -1,6 +1,7 @@
 package service
 
 import (
+	plugin_diff "v/plugin/diff"
 	plugin_fx "v/plugin/fx"
 	plugin_jv "v/plugin/jv"
 	plugin_json2excel "v/plugin/json2excel"
@@ -59,6 +60,7 @@ func (p Plugin) List() []PluginTemplate {
 	list := []PluginTemplate{
 		&(plugin_json2excel.Json2Excel{}),
 		&(plugin_jv.Jv{}),
+		&(plugin_diff.Diff{}),
 		&(plugin_fx.Fx{}),
 		&(plugin_pwd.Pwd{}),
 		&(plugin_tt.TT{}),
