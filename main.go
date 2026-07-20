@@ -26,10 +26,16 @@ func main() {
 		args = append(args, string(bytes))
 	}
 
+	// Command aliases (short forms)
+	aliases := map[string]string{
+		"gp": "genpwd",
+	}
+	if real, ok := aliases[firstArg]; ok {
+		firstArg = real
+	}
+
 	switch firstArg {
-	case "-help":
-	case "--help":
-	case "-h":
+	case "-help", "--help", "-h":
 		fmt.Println(service.Help())
 		return
 	}

@@ -125,29 +125,33 @@ CNKI Translate disabled
 
 Generate cryptographically secure random passwords with an interactive TUI for configuring rules.
 
+**Short command:** `gp` (alias for `genpwd`)
+
 ```bash
 # Interactive TUI (default) - configure rules and generate passwords
-$ v genpwd
+$ v gp
 
 # Generate a 20-char password to stdout
-$ v genpwd -l 20
+$ v gp -l 20
 
 # Generate 5 passwords of length 12
-$ v genpwd -l 12 -n 5
+$ v gp -l 12 -n 5
 
 # Generate and copy to clipboard
-$ v genpwd -l 16 -c
+$ v gp -l 16 -c
 
 # No special characters
-$ v genpwd -l 16 -ns
+$ v gp -l 16 -ns
 ```
 
 **Interactive TUI keys:**
 
 | Key | Action |
 |-----|--------|
+| `←` `→` | Adjust length (presets: 8 12 16 20 24 32 48 64) |
+| `Enter` | Custom length input (on length row) |
+| `Space` | Next preset / toggle checkbox |
 | `Tab` / `↑↓` | Navigate between options |
-| `Space` / `Enter` | Toggle checkbox / edit length |
 | `r` | Regenerate password |
 | `y` | Copy password to clipboard |
 | `q` | Quit |

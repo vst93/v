@@ -9,28 +9,32 @@ import (
 	"github.com/rivo/tview"
 )
 
+// Preset password lengths for the slider.
+var presetLengths = []int{8, 12, 16, 20, 24, 32, 48, 64}
+
 // PasswordUI is the interactive password generator TUI.
 type PasswordUI struct {
-	app     *tview.Application
-	config  PasswordConfig
-	pwd     string
-	focus   int // which form item is focused
-	items   []formItem
-	preview *tview.TextView
-	status  *tview.TextView
-	helpBar *tview.TextView
+	app       *tview.Application
+	config    PasswordConfig
+	pwd       string
+	focus     int // which form item is focused
+	lengthIdx int // index into presetLengths, -1 = custom
+	items     []formItem
+	preview   *tview.TextView
+	status    *tview.TextView
+	helpBar   *tview.TextView
 }
 
 type formItem struct {
 	label    string
-	itemType string // "checkbox", "input"
+	itemType string // "slider", "checkbox"
 }
 
 func NewPasswordUI(config PasswordConfig) *PasswordUI {
-	return &PasswordUI{
+	ui := &PasswordUI{
 		config: config,
 		items: []formItem{
-			{label: "Length", itemType: "input"},
+			{label: "Length", itemType: "slider"},
 			{label: "Lowercase (a-z)", itemType: "checkbox"},
 			{label: "Uppercase (A-Z)", itemType: "checkbox"},
 			{label: "Digits (0-9)", itemType: "checkbox"},
@@ -38,6 +42,17 @@ func NewPasswordUI(config PasswordConfig) *PasswordUI {
 		},
 		focus: 0,
 	}
+
+	// Find closest preset or mark as custom
+	ui.lengthIdx = -1
+	for i, l := range presetLengths {
+		if l == config.Length {
+			ui.lengthIdx = i
+			break
+		}
+	}
+
+	return ui
 }
 
 func (ui *PasswordUI) Run() error {
@@ -69,21 +84,28 @@ func (ui *PasswordUI) Run() error {
 	ui.helpBar = tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
-	ui.helpBar.SetText("[#888888]Tab/↑↓ Navigate   Space Toggle   r Regenerate   y Copy   q Quit[-]")
+	ui.refreshHelp()
 
-	// --- Length input field (hidden, activated when editing) ---
+	// --- Length input field (for custom length) ---
 	lengthField := tview.NewInputField().
-		SetLabel("New length (1-128): ").
+		SetLabel("Custom length (1-128): ").
 		SetFieldWidth(10).
-		SetPlaceholder(fmt.Sprintf("%d", ui.config.Length)).
 		SetAcceptanceFunc(tview.InputFieldInteger)
 	lengthField.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			v := strings.TrimSpace(lengthField.GetText())
-			if v == "" {
-				// Keep current value if empty
-			} else if n, err := fmtAtoi(v); err == nil && n >= 1 && n <= 128 {
-				ui.config.Length = n
+			if v != "" {
+				if n, err := fmtAtoi(v); err == nil && n >= 1 && n <= 128 {
+					ui.config.Length = n
+					// Check if it matches a preset
+					ui.lengthIdx = -1
+					for i, l := range presetLengths {
+						if l == n {
+							ui.lengthIdx = i
+							break
+						}
+					}
+				}
 			}
 			ui.app.SetRoot(ui.buildLayout(form), true)
 			ui.refreshForm(form)
@@ -111,22 +133,42 @@ func (ui *PasswordUI) Run() error {
 		case tcell.KeyTab:
 			ui.focus = (ui.focus + 1) % len(ui.items)
 			ui.refreshForm(form)
+			ui.refreshHelp()
 			return nil
 		case tcell.KeyBacktab:
 			ui.focus = (ui.focus - 1 + len(ui.items)) % len(ui.items)
 			ui.refreshForm(form)
+			ui.refreshHelp()
 			return nil
 		case tcell.KeyUp:
 			ui.focus = (ui.focus - 1 + len(ui.items)) % len(ui.items)
 			ui.refreshForm(form)
+			ui.refreshHelp()
 			return nil
 		case tcell.KeyDown:
 			ui.focus = (ui.focus + 1) % len(ui.items)
 			ui.refreshForm(form)
+			ui.refreshHelp()
 			return nil
+		case tcell.KeyLeft:
+			if ui.focus == 0 {
+				ui.lengthPrev()
+				ui.refreshForm(form)
+				ui.regenerate()
+				ui.refreshPreview()
+				return nil
+			}
+		case tcell.KeyRight:
+			if ui.focus == 0 {
+				ui.lengthNext()
+				ui.refreshForm(form)
+				ui.regenerate()
+				ui.refreshPreview()
+				return nil
+			}
 		case tcell.KeyEnter:
 			if ui.focus == 0 {
-				// Edit length
+				// Edit custom length
 				lengthField.SetText("")
 				ui.app.SetRoot(ui.buildLengthLayout(lengthField), true)
 				ui.app.SetFocus(lengthField)
@@ -148,6 +190,12 @@ func (ui *PasswordUI) Run() error {
 					ui.regenerate()
 					ui.refreshPreview()
 					ui.refreshStatus()
+				} else {
+					// Space on slider = next preset
+					ui.lengthNext()
+					ui.refreshForm(form)
+					ui.regenerate()
+					ui.refreshPreview()
 				}
 				return nil
 			case 'r':
@@ -195,6 +243,54 @@ func (ui *PasswordUI) buildLengthLayout(field *tview.InputField) *tview.Flex {
 		AddItem(ui.helpBar, 1, 0, false)
 }
 
+// lengthNext advances to the next preset (or increases by 4 if custom).
+func (ui *PasswordUI) lengthNext() {
+	if ui.lengthIdx >= 0 && ui.lengthIdx < len(presetLengths)-1 {
+		ui.lengthIdx++
+		ui.config.Length = presetLengths[ui.lengthIdx]
+	} else if ui.lengthIdx < 0 {
+		// Custom: increase by 4, clamp at 128
+		ui.config.Length += 4
+		if ui.config.Length > 128 {
+			ui.config.Length = 128
+		}
+		// Check if we hit a preset
+		for i, l := range presetLengths {
+			if l == ui.config.Length {
+				ui.lengthIdx = i
+				return
+			}
+		}
+	}
+}
+
+// lengthPrev goes to the previous preset (or decreases by 4 if custom).
+func (ui *PasswordUI) lengthPrev() {
+	if ui.lengthIdx > 0 {
+		ui.lengthIdx--
+		ui.config.Length = presetLengths[ui.lengthIdx]
+	} else if ui.lengthIdx < 0 {
+		// Custom: decrease by 4, clamp at 1
+		ui.config.Length -= 4
+		if ui.config.Length < 1 {
+			ui.config.Length = 1
+		}
+		for i, l := range presetLengths {
+			if l == ui.config.Length {
+				ui.lengthIdx = i
+				return
+			}
+		}
+	} else if ui.lengthIdx == 0 {
+		// At first preset, switch to custom going down
+		ui.lengthIdx = -1
+		ui.config.Length = presetLengths[0] - 4
+		if ui.config.Length < 1 {
+			ui.config.Length = 1
+		}
+	}
+}
+
 func (ui *PasswordUI) toggleCurrent() {
 	switch ui.focus {
 	case 1:
@@ -221,7 +317,6 @@ func (ui *PasswordUI) regenerate() {
 
 func (ui *PasswordUI) refreshPreview() {
 	ui.preview.Clear()
-	// Color-code: letters white, digits cyan, special yellow
 	var sb strings.Builder
 	sb.WriteString("\n")
 	for _, ch := range ui.pwd {
@@ -250,18 +345,12 @@ func (ui *PasswordUI) refreshForm(form *tview.TextView) {
 		selected := i == ui.focus
 		cursor := "  "
 		if selected {
-			cursor = fmt.Sprintf("[#50fa7b::b]▶ [-:-:-]")
+			cursor = "[#50fa7b::b]▶ [-:-:-]"
 		}
 
 		switch i {
 		case 0:
-			// Length input
-			val := fmt.Sprintf("[#bd93f9]%d[-]", ui.config.Length)
-			if selected {
-				sb.WriteString(fmt.Sprintf("%s[#f8f8f2::b]Length:      [-:-:-]%s [#6272a4](Enter to edit)[-]\n", cursor, val))
-			} else {
-				sb.WriteString(fmt.Sprintf("%s[#f8f8f2]Length:      [-]%s\n", cursor, val))
-			}
+			ui.writeLengthSlider(&sb, cursor, selected)
 		case 1:
 			ui.writeCheckbox(&sb, cursor, selected, "Lowercase   ", ui.config.Lowercase, "a-z")
 		case 2:
@@ -283,6 +372,38 @@ func (ui *PasswordUI) refreshForm(form *tview.TextView) {
 	fmt.Fprint(form, sb.String())
 }
 
+// writeLengthSlider renders the length selection as a horizontal slider with preset stops.
+func (ui *PasswordUI) writeLengthSlider(sb *strings.Builder, cursor string, selected bool) {
+	labelColor := "[#f8f8f2]"
+	endTag := "[-]"
+	if selected {
+		labelColor = "[#f8f8f2::b]"
+		endTag = "[-:-:-]"
+	}
+
+	// Build the slider bar
+	var bar strings.Builder
+	for i, l := range presetLengths {
+		if i == ui.lengthIdx {
+			bar.WriteString(fmt.Sprintf("[#50fa7b::b][%d][-:-:-]", l))
+		} else {
+			bar.WriteString(fmt.Sprintf("[#6272a4] %d [-]", l))
+		}
+		if i < len(presetLengths)-1 {
+			bar.WriteString("[#6272a4]─[-]")
+		}
+	}
+
+	// If custom length, show it separately
+	customNote := ""
+	if ui.lengthIdx < 0 {
+		customNote = fmt.Sprintf("  [#ffb86c](custom: %d)[-]", ui.config.Length)
+	}
+
+	sb.WriteString(fmt.Sprintf("%s%sLength:%s  %s%s\n", cursor, labelColor, endTag, bar.String(), customNote))
+	sb.WriteString(fmt.Sprintf("  [#6272a4]← → preset | Enter for custom[-]\n"))
+}
+
 func (ui *PasswordUI) writeCheckbox(sb *strings.Builder, cursor string, selected bool, label string, checked bool, example string) {
 	check := "[#ff5555]☐[-]"
 	if checked {
@@ -298,8 +419,15 @@ func (ui *PasswordUI) writeCheckbox(sb *strings.Builder, cursor string, selected
 }
 
 func (ui *PasswordUI) refreshStatus() {
-	// Use clipboard status or default info
 	ui.status.SetText("[#6272a4]Press r to regenerate | y to copy[-]")
+}
+
+func (ui *PasswordUI) refreshHelp() {
+	if ui.focus == 0 {
+		ui.helpBar.SetText("[#888888]← → Adjust length   Enter Custom length   Space Next   Tab/↑↓ Navigate   r Regenerate   y Copy   q Quit[-]")
+	} else {
+		ui.helpBar.SetText("[#888888]Space Toggle   Tab/↑↓ Navigate   r Regenerate   y Copy   q Quit[-]")
+	}
 }
 
 func passwordStrength(entropy float64) (string, string) {
