@@ -171,10 +171,12 @@ $ v gp -l 16 -ns
 
 ### jv - JSON Viewer
 
-Interactive JSON tree viewer and formatter with search, fold/unfold, and clipboard copy.
+Editor-style JSON viewer (utools-like): line numbers, syntax highlighting, code folding,
+search panel, path filter bar, smooth mouse/touchpad scrolling, and text editing with
+graceful fallback for invalid JSON.
 
 ```bash
-# Interactive tree viewer (from clipboard)
+# Interactive viewer (from clipboard)
 $ v jv
 
 # Format (pretty-print) JSON
@@ -189,6 +191,30 @@ $ v jv -file data.json
 # Pipe input
 $ cat data.json | v jv
 ```
+
+Non-JSON input opens as plain editable text without formatting. Editing the text back
+into valid JSON automatically re-enables folding, path lookup and minified copy.
+
+Viewer keys & mouse:
+
+| Key / Mouse | Action |
+|-------------|--------|
+| `↑↓` / `j` `k` | Move cursor (`PgUp`/`PgDn` page, `g`/`G` first/last) |
+| `Enter` / `Space` / `o` | Fold / unfold at cursor |
+| `h` / `l` | Fold, jump to parent / unfold |
+| `e` / `c` | Expand / collapse all |
+| `i` | Inline edit (`Esc` done, `Ctrl-Z`/`Ctrl-Y` undo/redo) |
+| `I` | Edit in `$EDITOR` (vim/vi/nano/notepad); returns on save |
+| `f` | Reformat document |
+| `/` or `Ctrl-F` | Search panel (`Enter` next, `Shift-Enter` prev, `Alt-C` case, `Alt-W` word, `Alt-R` regex) |
+| `n` / `N` / `F3` | Next / previous match |
+| `Tab` | Filter bar: `.key` `[0]` `["k"]` `.length` `.map(.k)` |
+| `u` | Toggle `\uXXXX` display |
+| `F` / `M` / `E` | Copy formatted / minified / minified+`\uXXXX` escaped JSON |
+| `y` / `p` | Copy value / path at cursor |
+| wheel | Scroll view (touchpad-smooth; cursor stays put) |
+| click | Select line; double-click for quick inline edit; click gutter chevron folds; drag scrollbar |
+| `?` / `q` | Help / quit |
 
 ### diff - Side-by-side Diff Viewer
 

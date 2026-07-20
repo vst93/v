@@ -8,6 +8,7 @@ require (
 	github.com/gookit/color v1.6.0
 	github.com/gookit/ini/v2 v2.3.2
 	github.com/rivo/tview v0.42.0
+	github.com/rivo/uniseg v0.4.7
 	github.com/xuri/excelize/v2 v2.10.0
 	golang.org/x/text v0.31.0
 )
@@ -19,7 +20,6 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.4 // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/tiendc/go-deepcopy v1.7.1 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xuri/efp v0.0.1 // indirect

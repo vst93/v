@@ -12,14 +12,14 @@ import (
 
 // Color styles for JSON pretty-print output.
 var (
-	colorKey       = color.New(color.FgCyan)
-	colorString    = color.New(color.FgGreen)
-	colorNumber    = color.New(color.FgYellow)
-	colorBool      = color.New(color.FgMagenta)
-	colorNull      = color.New(color.FgRed, color.OpBold)
-	colorPunct     = color.New(color.FgDarkGray)
-	colorIndex     = color.New(color.FgBlue, color.OpBold)
-	colorBracket   = color.New(color.FgBlue)
+	colorKey     = color.New(color.FgCyan)
+	colorString  = color.New(color.FgGreen)
+	colorNumber  = color.New(color.FgYellow)
+	colorBool    = color.New(color.FgMagenta)
+	colorNull    = color.New(color.FgRed, color.OpBold)
+	colorPunct   = color.New(color.FgDarkGray)
+	colorIndex   = color.New(color.FgBlue, color.OpBold)
+	colorBracket = color.New(color.FgBlue)
 )
 
 // FormatJSON renders a parsed JSON value (from DecodeJSON) into a
@@ -27,7 +27,15 @@ var (
 // When colorize is false the output is plain (no ANSI codes).
 func FormatJSON(v interface{}, indent int, colorize bool) string {
 	var sb strings.Builder
-	renderJSON(&sb, v, 0, indent, colorize)
+	renderJSON(&sb, v, 0, indent, colorize, false)
+	return sb.String()
+}
+
+// FormatJSONEscape renders like FormatJSON without colors, optionally
+// escaping all non-ASCII characters as \uXXXX sequences.
+func FormatJSONEscape(v interface{}, indent int, escape bool) string {
+	var sb strings.Builder
+	renderJSON(&sb, v, 0, indent, false, escape)
 	return sb.String()
 }
 
@@ -42,7 +50,7 @@ func CompactJSON(v interface{}, escape bool) string {
 }
 
 // renderJSON is the recursive worker for FormatJSON.
-func renderJSON(sb *strings.Builder, v interface{}, depth, indent int, colorize bool) {
+func renderJSON(sb *strings.Builder, v interface{}, depth, indent int, colorize, escape bool) {
 	switch val := v.(type) {
 	case *OrderedMap:
 		if val == nil || val.Len() == 0 {
@@ -54,9 +62,9 @@ func renderJSON(sb *strings.Builder, v interface{}, depth, indent int, colorize 
 		keys := val.Keys()
 		for i, k := range keys {
 			writeIndent(sb, depth+1, indent)
-			writeKey(sb, k, colorize)
+			writeKey(sb, k, colorize, escape)
 			writePunct(sb, ": ", colorize)
-			renderJSON(sb, val.Get(k), depth+1, indent, colorize)
+			renderJSON(sb, val.Get(k), depth+1, indent, colorize, escape)
 			if i < len(keys)-1 {
 				writePunct(sb, ",", colorize)
 			}
@@ -74,7 +82,7 @@ func renderJSON(sb *strings.Builder, v interface{}, depth, indent int, colorize 
 		sb.WriteByte('\n')
 		for i, item := range val {
 			writeIndent(sb, depth+1, indent)
-			renderJSON(sb, item, depth+1, indent, colorize)
+			renderJSON(sb, item, depth+1, indent, colorize, escape)
 			if i < len(val)-1 {
 				writePunct(sb, ",", colorize)
 			}
@@ -84,7 +92,7 @@ func renderJSON(sb *strings.Builder, v interface{}, depth, indent int, colorize 
 		writePunct(sb, "]", colorize)
 
 	case string:
-		writeString(sb, val, colorize, false)
+		writeString(sb, val, colorize, escape)
 
 	case json.Number:
 		writeNumber(sb, val.String(), colorize)
@@ -169,20 +177,23 @@ func renderCompact(sb *strings.Builder, v interface{}, escape bool) {
 
 // --- Coloured writers ---
 
-func writeKey(sb *strings.Builder, key string, colorize bool) {
+func writeKey(sb *strings.Builder, key string, colorize, escape bool) {
+	q := quoteString(key)
+	if escape {
+		q = escapeJSONString(key)
+	}
 	if colorize {
-		sb.WriteString(colorKey.Render(quoteString(key)))
+		sb.WriteString(colorKey.Render(q))
 	} else {
-		sb.WriteString(quoteString(key))
+		sb.WriteString(q)
 	}
 }
 
 func writeString(sb *strings.Builder, s string, colorize bool, escape bool) {
 	quoted := quoteString(s)
 	if escape {
-		// Keep non-ASCII as \uXXXX — this is what encoding/json.Marshal does.
-		b, _ := json.Marshal(s)
-		quoted = string(b)
+		// Escape non-ASCII as \uXXXX while keeping <>& as-is.
+		quoted = escapeJSONString(s)
 	}
 	if colorize {
 		sb.WriteString(colorString.Render(quoted))
@@ -255,7 +266,7 @@ func quoteString(s string) string {
 		case '\r':
 			sb.WriteString(`\r`)
 		case '	':
-			sb.WriteString(`	`)
+			sb.WriteString(`\t`)
 		default:
 			if r < 0x20 {
 				sb.WriteString(fmt.Sprintf(`\u%04x`, r))
@@ -285,7 +296,7 @@ func escapeJSONString(s string) string {
 		case '\r':
 			sb.WriteString(`\r`)
 		case '	':
-			sb.WriteString(`	`)
+			sb.WriteString(`\t`)
 		default:
 			if r < 0x20 {
 				sb.WriteString(fmt.Sprintf(`\u%04x`, r))

@@ -23,38 +23,38 @@ func (j *Jv) Init() error {
 	j.description = "JSON Viewer & Formatter - format, compress, escape, and interactively browse JSON"
 	j.command = "jv"
 	j.args = map[string]string{
-		"-f":     "Format (pretty-print) JSON from clipboard/file/pipe/stdin",
-		"-c":     "Compress (minify) JSON to a single line",
-		"-e":     "Escape non-ASCII to \\uXXXX sequences",
-		"-u":     "Unescape \\uXXXX sequences to UTF-8 text",
-		"-i":     "Interactive tree viewer (default when no flag given)",
-		"-sort":  "Sort object keys alphabetically",
-		"-file":  "Read from file path instead of clipboard",
-		"-raw":   "Disable colored output (plain text)",
-		"-pipe":  "Read from pipe/stdin (auto-detected)",
+		"-f":    "Format (pretty-print) JSON from clipboard/file/pipe/stdin",
+		"-c":    "Compress (minify) JSON to a single line",
+		"-e":    "Escape non-ASCII to \\uXXXX sequences",
+		"-u":    "Unescape \\uXXXX sequences to UTF-8 text",
+		"-i":    "Interactive tree viewer (default when no flag given)",
+		"-sort": "Sort object keys alphabetically",
+		"-file": "Read from file path instead of clipboard",
+		"-raw":  "Disable colored output (plain text)",
+		"-pipe": "Read from pipe/stdin (auto-detected)",
 	}
 	j.author = "vst"
 	return nil
 }
 
-func (j *Jv) GetName() string        { return j.name }
-func (j *Jv) GetVersion() string     { return j.version }
-func (j *Jv) GetDescription() string { return j.description }
-func (j *Jv) GetCommand() string     { return j.command }
+func (j *Jv) GetName() string            { return j.name }
+func (j *Jv) GetVersion() string         { return j.version }
+func (j *Jv) GetDescription() string     { return j.description }
+func (j *Jv) GetCommand() string         { return j.command }
 func (j *Jv) GetArgs() map[string]string { return j.args }
-func (j *Jv) GetAuthor() string      { return j.author }
+func (j *Jv) GetAuthor() string          { return j.author }
 
 func (j *Jv) Stop() error { return nil }
 
 func (j *Jv) Run(args []string) error {
 	// Parse flags
 	var (
-		mode      string // "format", "compress", "escape", "unescape", "interactive"
-		filePath  string
-		raw       bool
-		sortKeys  bool
-		pipeData  string
-		hasPipe   bool
+		mode     string // "format", "compress", "escape", "unescape", "interactive"
+		filePath string
+		raw      bool
+		sortKeys bool
+		pipeData string
+		hasPipe  bool
 	)
 
 	mode = "interactive" // default
@@ -197,20 +197,11 @@ func (j *Jv) doUnescape(input string) error {
 	return nil
 }
 
-// doInteractive launches the interactive tree viewer.
+// doInteractive launches the interactive viewer. Invalid JSON is not
+// an error: the viewer shows it as plain editable text without
+// formatting.
 func (j *Jv) doInteractive(input string, sortKeys bool, source string) error {
-	data, err := DecodeJSON(input)
-	if err != nil {
-		return fmt.Errorf("invalid JSON: %w", err)
-	}
-
-	if sortKeys {
-		if om, ok := data.(*OrderedMap); ok {
-			om.SortKeys()
-		}
-	}
-
-	return RunInteractive(data, source)
+	return RunInteractive(input, source, sortKeys)
 }
 
 // printHelp displays usage information.
@@ -235,13 +226,21 @@ func (j *Jv) printHelp() {
 	fmt.Println("  -h         Show this help")
 	fmt.Println()
 	fmt.Println("Interactive viewer keys:")
-	fmt.Println("  Enter      Collapse/expand current node")
-	fmt.Println("  ↑↓ / jk    Navigate up/down")
-	fmt.Println("  c          Collapse all")
-	fmt.Println("  e          Expand all")
-	fmt.Println("  y          Copy current node value to clipboard")
-	fmt.Println("  p          Copy current node path to clipboard")
-	fmt.Println("  q          Quit")
+	fmt.Println("  ↑↓ / jk    Move cursor          PgUp/PgDn  Page up/down")
+	fmt.Println("  Enter/o    Fold / unfold        h / l      Fold, jump parent / unfold")
+	fmt.Println("  e / c      Expand / collapse all")
+	fmt.Println("  i          Inline edit (Esc done, Ctrl-Z/Y undo/redo)")
+	fmt.Println("  I          Edit in $EDITOR (vim/vi/nano/notepad); returns on save")
+	fmt.Println("  f          Reformat document")
+	fmt.Println("  / or Ctrl-F  Search (Enter next, Shift-Enter prev, Alt-C/W/R case/word/regex)")
+	fmt.Println("  Tab        Filter bar: .key  [0]  [\"k\"]  .length  .map(.k)")
+	fmt.Println("  u          Toggle \\uXXXX display")
+	fmt.Println("  F / M / E  Copy formatted / minified / minified+\\uXXXX escaped JSON")
+	fmt.Println("  y / p      Copy value / path at cursor")
+	fmt.Println("  ?          Help overlay         q  Quit")
+	fmt.Println("  Mouse: wheel scrolls view, click selects, double-click edits, gutter folds")
+	fmt.Println()
+	fmt.Println("Non-JSON input is opened as plain editable text without formatting.")
 }
 
 // expandHome expands ~ to the user's home directory.
