@@ -10,14 +10,14 @@ import (
 
 // TreeNode represents a node in the JSON tree.
 type JSONNode struct {
-	Key       string      // key in parent object, or "" for root/array elements
-	Value     interface{} // the parsed JSON value
-	Type      string      // "object", "array", "string", "number", "bool", "null"
+	Key       string
+	Value     interface{}
+	Type      string
 	Depth     int
 	Parent    *JSONNode
 	Children  []*JSONNode
 	Collapsed bool
-	Path      string // dotted path for display
+	Path      string
 }
 
 // BuildTree constructs a JSONNode tree from a parsed JSON value.
@@ -51,55 +51,90 @@ func BuildTree(value interface{}, key, path string, depth int, parent *JSONNode)
 		}
 	}
 
-	// Collapse deep nodes by default (depth >= 2)
-	if depth >= 2 {
+	// Collapse deep nodes by default (depth >= 1)
+	if depth >= 1 {
 		node.Collapsed = true
 	}
 
 	return node
 }
 
-// nodeLabel returns the display label for a tree node.
+// nodeLabel returns a clean display label for a tree node.
 func nodeLabel(node *JSONNode) string {
 	var sb strings.Builder
 
-	if node.Key != "" {
-		// Object key or array index
-		if strings.HasPrefix(node.Key, "[") {
-			// Array index
-			sb.WriteString(tview.Escape(fmt.Sprintf("%s ", node.Key)))
-		} else {
-			sb.WriteString(fmt.Sprintf("[#00ffff]%s[-:-:-] ", tview.Escape(node.Key)))
+	// Root node: show as "root" with summary
+	if node.Depth == 0 && node.Key == "" {
+		switch node.Type {
+		case "object":
+			count := len(node.Children)
+			if node.Collapsed {
+				return fmt.Sprintf("[#586e75]▸[-:-:-] [#93a1a1]root[-:-:-] [#586e75]{%d}[-:-:-]", count)
+			}
+			return fmt.Sprintf("[#586e75]▾[-:-:-] [#93a1a1]root[-:-:-]")
+		case "array":
+			count := len(node.Children)
+			if node.Collapsed {
+				return fmt.Sprintf("[#586e75]▸[-:-:-] [#93a1a1]root[-:-:-] [#586e75][%d][-:-:-]", count)
+			}
+			return fmt.Sprintf("[#586e75]▾[-:-:-] [#93a1a1]root[-:-:-]")
 		}
 	}
 
+	// Expand/collapse indicator for containers (non-empty only)
+	if node.Type == "object" || node.Type == "array" {
+		hasChildren := len(node.Children) > 0
+		if hasChildren {
+			if node.Collapsed {
+				sb.WriteString("[#586e75]▸[-:-:-] ")
+			} else {
+				sb.WriteString("[#586e75]▾[-:-:-] ")
+			}
+		} else {
+			sb.WriteString("  ")
+		}
+	} else {
+		sb.WriteString("  ")
+	}
+
+	// Key
+	if node.Key != "" {
+		if strings.HasPrefix(node.Key, "[") {
+			// Array index - dim
+			sb.WriteString(fmt.Sprintf("[#586e75]%s[-:-:-] ", node.Key))
+		} else {
+			sb.WriteString(fmt.Sprintf("[#268bd2]%s[-:-:-] ", tview.Escape(node.Key)))
+		}
+	}
+
+	// Value / summary
 	switch node.Type {
 	case "object":
 		count := len(node.Children)
-		if node.Collapsed {
-			sb.WriteString(fmt.Sprintf("[#555555]{…}[-:-:-] [#888888]{%d}[-:-:-]", count))
-		} else {
-			sb.WriteString(fmt.Sprintf("[#555555]{[-:-:-]"))
+		if count == 0 {
+			sb.WriteString("[#586e75]{}[-:-:-]")
+		} else if node.Collapsed {
+			sb.WriteString(fmt.Sprintf("[#586e75]{%d}[-:-:-]", count))
 		}
 	case "array":
 		count := len(node.Children)
-		if node.Collapsed {
-			sb.WriteString(fmt.Sprintf("[#555555][…] [-:-:-][#888888][%d][-:-:-]", count))
-		} else {
-			sb.WriteString(fmt.Sprintf("[#555555][[-:-:-]"))
+		if count == 0 {
+			sb.WriteString("[#586e75][][-:-:-]")
+		} else if node.Collapsed {
+			sb.WriteString(fmt.Sprintf("[#586e75][%d][-:-:-]", count))
 		}
 	case "string":
 		val := node.Value.(string)
-		if len([]rune(val)) > 50 {
-			val = string([]rune(val)[:50]) + "…"
+		if len([]rune(val)) > 60 {
+			val = string([]rune(val)[:60]) + "…"
 		}
-		sb.WriteString(fmt.Sprintf("[#00ff00]\"%s\"[-:-:-]", tview.Escape(val)))
+		sb.WriteString(fmt.Sprintf("[#859900]\"%s\"[-:-:-]", tview.Escape(val)))
 	case "number":
-		sb.WriteString(fmt.Sprintf("[#ffff00]%s[-:-:-]", node.Value))
-	case "bool":
-		sb.WriteString(fmt.Sprintf("[#ff00ff]%v[-:-:-]", node.Value))
+		sb.WriteString(fmt.Sprintf("[#b58900]%s[-:-:-]", node.Value))
+	case "boolean":
+		sb.WriteString(fmt.Sprintf("[#d33682]%v[-:-:-]", node.Value))
 	case "null":
-		sb.WriteString("[#ff0000::b]null[-:-:-]")
+		sb.WriteString("[#dc322f]null[-:-:-]")
 	}
 
 	return sb.String()
@@ -111,16 +146,22 @@ func RunInteractive(data interface{}, source string) error {
 
 	rootNode := BuildTree(data, "", "", 0, nil)
 
-	// Tree view
+	// Tree view - no graphics lines, clean indentation
 	tree := tview.NewTreeView().
-		SetGraphicsColor(tcell.ColorDarkGray)
+		SetGraphics(false).
+		SetAlign(false)
+	tree.SetBorder(true).
+		SetTitle(fmt.Sprintf(" %s ", source)).
+		SetTitleAlign(tview.AlignLeft)
+	tree.SetBackgroundColor(tcell.ColorDefault)
 
-	// Build tview tree nodes from our JSONNode tree
+	// Build tview tree nodes with indentation
 	var buildTViewNodes func(jn *JSONNode) *tview.TreeNode
 	buildTViewNodes = func(jn *JSONNode) *tview.TreeNode {
 		node := tview.NewTreeNode(nodeLabel(jn)).
 			SetExpanded(!jn.Collapsed).
-			SetReference(jn)
+			SetReference(jn).
+			SetIndent(2) // 2 spaces per level
 
 		for _, child := range jn.Children {
 			node.AddChild(buildTViewNodes(child))
@@ -131,8 +172,16 @@ func RunInteractive(data interface{}, source string) error {
 	root := buildTViewNodes(rootNode)
 	tree.SetRoot(root).SetCurrentNode(root)
 
-	// refreshNode updates the label and expansion state of a tview node
-	// to match its underlying JSONNode.
+	// Apply selected style to all nodes: subtle dark background
+	var applySelectedStyle func(tn *tview.TreeNode)
+	applySelectedStyle = func(tn *tview.TreeNode) {
+		tn.SetSelectedTextStyle(tcell.StyleDefault.Background(tcell.Color236))
+		for _, child := range tn.GetChildren() {
+			applySelectedStyle(child)
+		}
+	}
+	applySelectedStyle(root)
+
 	refreshNode := func(tn *tview.TreeNode) {
 		ref := tn.GetReference()
 		if ref == nil {
@@ -143,7 +192,6 @@ func RunInteractive(data interface{}, source string) error {
 			SetExpanded(!jn.Collapsed)
 	}
 
-	// refreshAll walks the entire tview tree and refreshes each node.
 	var refreshAll func(tn *tview.TreeNode)
 	refreshAll = func(tn *tview.TreeNode) {
 		refreshNode(tn)
@@ -152,10 +200,10 @@ func RunInteractive(data interface{}, source string) error {
 		}
 	}
 
-	// Info bar at bottom
+	// Info bar
 	infoBar := tview.NewTextView()
-	infoBar.SetDynamicColors(true).
-		SetTextAlign(tview.AlignLeft)
+	infoBar.SetDynamicColors(true).SetTextAlign(tview.AlignLeft)
+	infoBar.SetBackgroundColor(tcell.ColorDefault)
 	updateInfoBar := func() {
 		current := tree.GetCurrentNode()
 		ref := current.GetReference()
@@ -163,36 +211,30 @@ func RunInteractive(data interface{}, source string) error {
 			return
 		}
 		jn := ref.(*JSONNode)
-		info := fmt.Sprintf(" [#00ffff]Path: [-:-:-]%s  [#00ffff]Type: [-:-:-]%s",
+		info := fmt.Sprintf(" [#268bd2]Path[-:-:-] %s  [#268bd2]Type[-:-:-] %s",
 			jn.Path, jn.Type)
 		if jn.Type == "object" || jn.Type == "array" {
-			info += fmt.Sprintf("  [#00ffff]Items: [-:-:-]%d", len(jn.Children))
+			info += fmt.Sprintf("  [#268bd2]Items[-:-:-] %d", len(jn.Children))
 		}
 		infoBar.SetText(info)
 	}
 	updateInfoBar()
 
-	// Header
-	header := tview.NewTextView().
-		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter)
-	header.SetText(fmt.Sprintf("[#ffaa00::b]jv - JSON Viewer[-:-:-]  [#555555]%s[-:-:-]", source))
-
 	// Help bar
 	helpBar := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
-	helpBar.SetText("[#888888]Enter: collapse/expand  ↑↓: navigate  c: collapse all  e: expand all  y: copy value  p: copy path  q: quit[-:-:-]")
+	helpBar.SetBackgroundColor(tcell.ColorDefault)
+	helpBar.SetText("[#586e75]Enter fold/expand  ↑↓ navigate  c collapse all  e expand all  y copy value  p copy path  q quit[-:-:-]")
 
 	// Layout
 	layout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(header, 1, 0, false).
 		AddItem(tree, 0, 1, true).
 		AddItem(infoBar, 1, 0, false).
 		AddItem(helpBar, 1, 0, false)
 
-	// Key bindings
+	// Tree selection handler
 	tree.SetSelectedFunc(func(node *tview.TreeNode) {
 		ref := node.GetReference()
 		if ref == nil {
@@ -206,6 +248,7 @@ func RunInteractive(data interface{}, source string) error {
 		}
 	})
 
+	// Keyboard handler
 	tree.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyRune:
@@ -244,6 +287,19 @@ func RunInteractive(data interface{}, source string) error {
 
 	tree.SetChangedFunc(func(node *tview.TreeNode) {
 		updateInfoBar()
+	})
+
+	// Override tree mouse scroll to move selection instead of scrolling
+	tree.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseScrollUp {
+			tree.Move(-1)
+			return action, nil // consume: don't let TreeView's default scroll
+		}
+		if action == tview.MouseScrollDown {
+			tree.Move(1)
+			return action, nil
+		}
+		return action, event
 	})
 
 	return app.SetRoot(layout, true).EnableMouse(true).Run()
@@ -286,8 +342,6 @@ func copyNodeValue(node *JSONNode) {
 // copyToClipboard copies text and shows a brief notification.
 func copyToClipboard(text, label string) {
 	if err := clipboardWrite(text); err != nil {
-		// Silently ignore clipboard errors in TUI
 		return
 	}
-	// Could add a toast notification here
 }
