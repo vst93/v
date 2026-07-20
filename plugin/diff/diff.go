@@ -87,6 +87,12 @@ func (d *Diff) Run(args []string) error {
 		}
 	}
 
+	// No inputs: open paste mode so the user can paste left/right text
+	// directly into the TUI. The clipboard is never read automatically.
+	if !hasPipe && leftPath == "" && rightPath == "" && !useClip {
+		return NewPasteViewer().Run()
+	}
+
 	// Gather left and right text
 	var leftText, rightText string
 	var leftName, rightName string
@@ -197,6 +203,7 @@ func (d *Diff) printHelp() {
 	fmt.Println("  v diff -file1 <f1> -file2 <f2>          Alias for -left/-right")
 	fmt.Println("  v diff -left <file> -clip               Compare file vs clipboard")
 	fmt.Println("  echo 'text' | v diff -right <file>       Compare pipe vs file")
+	fmt.Println("  v diff                                  Paste mode: paste left/right text in TUI")
 	fmt.Println()
 	fmt.Println("Options:")
 	fmt.Println("  -inline    Output unified diff to stdout (no TUI)")
@@ -210,6 +217,7 @@ func (d *Diff) printHelp() {
 	fmt.Println("  c          Show only changed lines")
 	fmt.Println("  a          Show all lines")
 	fmt.Println("  q          Quit")
+	fmt.Println("  e          Edit (return to paste mode, when launched with no files)")
 	fmt.Println()
 	fmt.Println("Colors:")
 	fmt.Println("  Red    = deleted (left only)")

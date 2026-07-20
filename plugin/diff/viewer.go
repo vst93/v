@@ -3,6 +3,7 @@ package plugin_diff
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -32,8 +33,10 @@ type DiffViewer struct {
 	// cached formatted content
 	leftContent  string
 	rightContent string
+	panelWidth int // render width for full-line backgrounds (0 = not yet known)
 
 	rootLayout *tview.Flex
+	onEdit     func() // invoked on 'e' to return to edit mode (nil = disabled)
 }
 
 // NewDiffViewer creates a new DiffViewer with the given diff lines.
@@ -45,9 +48,15 @@ func NewDiffViewer(lines []DiffLine, leftFile, rightFile string) *DiffViewer {
 	}
 }
 
-// Run launches the interactive TUI.
-func (dv *DiffViewer) Run() error {
-	dv.app = tview.NewApplication()
+// build constructs the viewer's widgets and layout. If app is non-nil it is
+// reused (for embedding in an external application such as the paste-mode
+// viewer); otherwise a new application is created. The input capture is
+// installed on the app and the configured app is returned.
+func (dv *DiffViewer) build(app *tview.Application) *tview.Application {
+	if app == nil {
+		app = tview.NewApplication()
+	}
+	dv.app = app
 
 	dv.leftView = tview.NewTextView().
 		SetDynamicColors(true).
@@ -68,7 +77,10 @@ func (dv *DiffViewer) Run() error {
 	dv.statusBar = tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignLeft)
 
 	dv.helpBar = tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
-	dv.helpBar.SetText("[#888888]↑↓/jk: navigate  n/N: next/prev diff  /: search  c: changes only  a: all  q: quit[-:-:-]")
+	dv.helpBar.SetText(helpText([]helpItem{
+		{"↑↓/jk", "nav"}, {"n/N", "diff"}, {"/", "search"},
+		{"c", "changes"}, {"a", "all"}, {"e", "edit"}, {"q", "quit"},
+	}))
 
 	dv.searchBar = tview.NewInputField().
 		SetLabel("[#ffaa00]Search: [-:-:-]").
@@ -100,6 +112,7 @@ func (dv *DiffViewer) Run() error {
 
 	mainRow := tview.NewFlex().
 		AddItem(leftPanel, 0, 1, false).
+		AddItem(vSeparator(), 1, 0, false).
 		AddItem(rightPanel, 0, 1, false)
 
 	// Bottom area: status bar + (help bar OR search bar)
@@ -127,6 +140,11 @@ func (dv *DiffViewer) Run() error {
 			case 'q':
 				dv.app.Stop()
 				return nil
+			case 'e':
+				if dv.onEdit != nil {
+					dv.onEdit()
+					return nil
+				}
 			case 'j':
 				dv.cursorDown()
 				return nil
@@ -170,96 +188,225 @@ func (dv *DiffViewer) Run() error {
 	// Set input capture on the app level so it works regardless of focus
 	dv.app.SetInputCapture(inputHandler)
 
-	return dv.app.SetRoot(dv.rootLayout, true).EnableMouse(true).Run()
+	// Re-render with full-width backgrounds whenever the terminal resizes
+	// (and on the first draw, once the real screen width is known).
+	dv.app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		w, _ := screen.Size()
+		pw := (w - 1) / 2
+		if pw < 1 {
+			pw = 1
+		}
+		if dv.panelWidth != pw {
+			dv.panelWidth = pw
+			dv.renderContent()
+			dv.renderToViews()
+		}
+		return false
+	})
+
+	return app
+}
+
+// Run launches the interactive TUI as a standalone application.
+func (dv *DiffViewer) Run() error {
+	app := dv.build(nil)
+	return app.SetRoot(dv.rootLayout, true).EnableMouse(true).Run()
+}
+
+// Root returns the root layout primitive, for embedding in an external app.
+func (dv *DiffViewer) Root() tview.Primitive {
+	return dv.rootLayout
+}
+
+// SetOnEdit registers a callback invoked when the user presses 'e' to return
+// to the input/edit mode. When nil (the default), 'e' is a no-op.
+func (dv *DiffViewer) SetOnEdit(fn func()) {
+	dv.onEdit = fn
 }
 
 // --- Rendering ---
+
+// Diff color palette (dark terminal theme, VS Code-style): soft tinted
+// backgrounds fill the whole row for changed lines, a stronger background
+// highlights the specific changed words, and blank regions show a hatch fill.
+const (
+	colorEqualText = "#cccccc"
+	colorLineNum   = "#555555"
+	colorLineNumHi = "#888888" // line number on a tinted background
+
+	colorDelBg     = "#4a2222" // soft dark red: deletions / left side of a change
+	colorDelText   = "#e0b0b0"
+	colorDelWordBg = "#7a3030" // stronger red: deleted words
+	colorAddBg     = "#224a22" // soft dark green: additions / right side of a change
+	colorAddText   = "#b0e0b0"
+	colorAddWordBg = "#307a30" // stronger green: added words
+
+	colorHatch = "#3a3a3a" // neutral dim hatch for blank regions
+	hatchChar  = "░"
+)
+
+// Bottom-bar styling (jv-inspired): key "pills" + dim descriptions, with
+// status segments joined by " · ".
+const (
+	colorPillBg = "#008080" // teal pill background
+	colorPillFg = "#000000" // black bold key on the pill
+	colorBarDim = "#888888" // dim descriptions / secondary status text
+	colorBarMain = "#aaaaaa" // primary status text
+	colorBarAcc = "#ffaa00"  // accent (search)
+)
+
+// helpItem pairs a key (shown as a pill) with a short description.
+type helpItem struct{ key, desc string }
+
+// pill renders a key as a filled "pill": black bold text on a teal background,
+// space-padded so it reads as a button (jv-style action chip).
+func pill(key string) string {
+	return fmt.Sprintf("[%s:%s:b] %s [-:-:-]", colorPillFg, colorPillBg, tview.Escape(key))
+}
+
+// helpText builds a help bar from key/description pairs: each key as a pill
+// followed by a dim description, joined with a double space.
+func helpText(items []helpItem) string {
+	parts := make([]string, len(items))
+	for i, it := range items {
+		parts[i] = pill(it.key) + " [" + colorBarDim + "]" + it.desc + "[-:-:-]"
+	}
+	return strings.Join(parts, "  ")
+}
+
+// vSeparator returns a 1-column vertical divider widget: a dim '│' column
+// that visually separates the left and right panels.
+func vSeparator() *tview.TextView {
+	s := tview.NewTextView().
+		SetDynamicColors(true).
+		SetWrap(false)
+	s.SetText("[#3a3a3a]" + strings.Repeat("│\n", 256) + "[-]")
+	return s
+}
 
 func (dv *DiffViewer) renderContent() {
 	dv.leftContent, dv.rightContent = dv.renderLines(dv.lines)
 }
 
+// renderLines builds the side-by-side text for both panels. Changed lines get
+// a soft full-width background tint; blank regions get a hatch fill; modified
+// lines also get inline word-level highlights with a stronger background. Each
+// line is padded to dv.panelWidth so the background/hatch fills the panel.
 func (dv *DiffViewer) renderLines(lines []DiffLine) (string, string) {
 	var leftSB, rightSB strings.Builder
 	lineNumWidth := dv.lineNumWidth()
+	pw := dv.panelWidth
 
 	for i, line := range lines {
 		leftRegion := fmt.Sprintf("[\"L%d\"]", i)
 		rightRegion := fmt.Sprintf("[\"R%d\"]", i)
-		leftEnd := `[""]`
-		rightEnd := `[""]`
+		end := `[""]`
 
 		switch line.Op {
 		case OpEqual:
 			leftSB.WriteString(leftRegion)
-			leftSB.WriteString(fmt.Sprintf("[#555555]%*d[-] [#cccccc]%s[-]", lineNumWidth, line.LeftNum, tview.Escape(line.Left)))
-			leftSB.WriteString(leftEnd)
-			leftSB.WriteString("\n")
+			leftSB.WriteString(fmt.Sprintf("[%s]%*d[-] [%s]%s[-]", colorLineNum, lineNumWidth, line.LeftNum, colorEqualText, tview.Escape(line.Left)))
+			leftSB.WriteString(end + "\n")
 
 			rightSB.WriteString(rightRegion)
-			rightSB.WriteString(fmt.Sprintf("[#555555]%*d[-] [#cccccc]%s[-]", lineNumWidth, line.RightNum, tview.Escape(line.Right)))
-			rightSB.WriteString(rightEnd)
-			rightSB.WriteString("\n")
+			rightSB.WriteString(fmt.Sprintf("[%s]%*d[-] [%s]%s[-]", colorLineNum, lineNumWidth, line.RightNum, colorEqualText, tview.Escape(line.Right)))
+			rightSB.WriteString(end + "\n")
 
 		case opChange:
 			leftSB.WriteString(leftRegion)
-			leftSB.WriteString(fmt.Sprintf("[#ffaa44]%*d[-] ", lineNumWidth, line.LeftNum))
-			leftSB.WriteString(renderInlineDiff(line.Left, line.Right, true))
-			leftSB.WriteString(leftEnd)
-			leftSB.WriteString("\n")
+			leftSB.WriteString(fmt.Sprintf("[%s:%s]%*d [-:-:-]", colorLineNumHi, colorDelBg, lineNumWidth, line.LeftNum))
+			leftSB.WriteString(renderInlineDiff(line.Left, line.Right, colorDelText, colorDelBg, colorDelWordBg, true))
+			leftSB.WriteString(bgPad(lineNumWidth+1+visibleWidth(line.Left), pw, colorDelBg))
+			leftSB.WriteString(end + "\n")
 
 			rightSB.WriteString(rightRegion)
-			rightSB.WriteString(fmt.Sprintf("[#ffaa44]%*d[-] ", lineNumWidth, line.RightNum))
-			rightSB.WriteString(renderInlineDiff(line.Left, line.Right, false))
-			rightSB.WriteString(rightEnd)
-			rightSB.WriteString("\n")
+			rightSB.WriteString(fmt.Sprintf("[%s:%s]%*d [-:-:-]", colorLineNumHi, colorAddBg, lineNumWidth, line.RightNum))
+			rightSB.WriteString(renderInlineDiff(line.Left, line.Right, colorAddText, colorAddBg, colorAddWordBg, false))
+			rightSB.WriteString(bgPad(lineNumWidth+1+visibleWidth(line.Right), pw, colorAddBg))
+			rightSB.WriteString(end + "\n")
 
 		case OpDel:
 			leftSB.WriteString(leftRegion)
-			leftSB.WriteString(fmt.Sprintf("[#ff4444]%*d[-] [#ff8888::d]%s[-:-:-]", lineNumWidth, line.LeftNum, tview.Escape(line.Left)))
-			leftSB.WriteString(leftEnd)
-			leftSB.WriteString("\n")
+			leftSB.WriteString(fmt.Sprintf("[%s:%s]%*d [%s:%s]%s[-:-:-]",
+				colorLineNumHi, colorDelBg, lineNumWidth, line.LeftNum,
+				colorDelText, colorDelBg, tview.Escape(line.Left)))
+			leftSB.WriteString(bgPad(lineNumWidth+1+visibleWidth(line.Left), pw, colorDelBg))
+			leftSB.WriteString(end + "\n")
 
 			rightSB.WriteString(rightRegion)
-			rightSB.WriteString(fmt.Sprintf("[#333333]%*s [-]", lineNumWidth, ""))
-			rightSB.WriteString(rightEnd)
-			rightSB.WriteString("\n")
+			rightSB.WriteString(hatchFill(pw))
+			rightSB.WriteString(end + "\n")
 
 		case OpAdd:
 			leftSB.WriteString(leftRegion)
-			leftSB.WriteString(fmt.Sprintf("[#333333]%*s [-]", lineNumWidth, ""))
-			leftSB.WriteString(leftEnd)
-			leftSB.WriteString("\n")
+			leftSB.WriteString(hatchFill(pw))
+			leftSB.WriteString(end + "\n")
 
 			rightSB.WriteString(rightRegion)
-			rightSB.WriteString(fmt.Sprintf("[#44ff44]%*d[-] [#88ff88]%s[-]", lineNumWidth, line.RightNum, tview.Escape(line.Right)))
-			rightSB.WriteString(rightEnd)
-			rightSB.WriteString("\n")
+			rightSB.WriteString(fmt.Sprintf("[%s:%s]%*d [%s:%s]%s[-:-:-]",
+				colorLineNumHi, colorAddBg, lineNumWidth, line.RightNum,
+				colorAddText, colorAddBg, tview.Escape(line.Right)))
+			rightSB.WriteString(bgPad(lineNumWidth+1+visibleWidth(line.Right), pw, colorAddBg))
+			rightSB.WriteString(end + "\n")
 		}
 	}
 
 	return leftSB.String(), rightSB.String()
 }
 
-func renderInlineDiff(left, right string, isLeft bool) string {
+// renderInlineDiff produces inline word-level highlights for a changed line.
+// baseText/baseBg apply to unchanged words; wordBg applies to the differing
+// words (deleted words on the left, added words on the right). Each segment
+// fully specifies its colours so the row background is preserved between
+// highlighted words.
+func renderInlineDiff(left, right, baseText, baseBg, wordBg string, isLeft bool) string {
 	parts := WordDiff(left, right)
 	var sb strings.Builder
 	for _, part := range parts {
 		escaped := tview.Escape(part.Text)
 		switch part.DiffType {
 		case OpEqual:
-			sb.WriteString(fmt.Sprintf("[#ffcc88]%s[-]", escaped))
+			sb.WriteString(fmt.Sprintf("[%s:%s]%s[-:-:-]", baseText, baseBg, escaped))
 		case OpDel:
 			if isLeft {
-				sb.WriteString(fmt.Sprintf("[#ff4444::d]%s[-:-:-]", escaped))
+				sb.WriteString(fmt.Sprintf("[%s:%s]%s[-:-:-]", baseText, wordBg, escaped))
 			}
 		case OpAdd:
 			if !isLeft {
-				sb.WriteString(fmt.Sprintf("[#44ff44::b]%s[-:-:-]", escaped))
+				sb.WriteString(fmt.Sprintf("[%s:%s]%s[-:-:-]", baseText, wordBg, escaped))
 			}
 		}
 	}
 	return sb.String()
+}
+
+// visibleWidth returns the display-cell count of s (1 cell per rune; CJK wide
+// chars are undercounted, consistent with the rest of the viewer).
+func visibleWidth(s string) int {
+	return utf8.RuneCountInString(s)
+}
+
+// bgPad returns a run of spaces coloured with bg that fills from contentW to
+// panelWidth, so the row background reaches the panel edge. Returns "" when
+// there is nothing to pad.
+func bgPad(contentW, panelW int, bg string) string {
+	if bg == "" || panelW <= 0 {
+		return ""
+	}
+	pad := panelW - contentW
+	if pad <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("[-:%s]%s[-:-:-]", bg, strings.Repeat(" ", pad))
+}
+
+// hatchFill returns a hatch pattern filling panelWidth cells, used for the
+// blank side of a pure insertion/deletion row.
+func hatchFill(panelW int) string {
+	if panelW <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("[%s]%s[-:-:-]", colorHatch, strings.Repeat(hatchChar, panelW))
 }
 
 func (dv *DiffViewer) renderToViews() {
@@ -496,23 +643,23 @@ func (dv *DiffViewer) updateStatusBar() {
 		}
 	}
 
-	searchInfo := ""
-	if len(dv.searchHits) > 0 {
-		searchInfo = fmt.Sprintf("  |  [#ffaa00]Search '%s'[-] [#555555][%d/%d hits][-]", dv.searchTerm, dv.searchPos+1, len(dv.searchHits))
-	}
-
-	curOp := "equal"
+	opWord, opColor := "equal", colorBarMain
 	if dv.currentIdx < len(dv.lines) {
 		switch dv.lines[dv.currentIdx].Op {
 		case OpAdd:
-			curOp = "[#44ff44]added[-]"
+			opWord, opColor = "added", "#44ff44"
 		case OpDel:
-			curOp = "[#ff4444]deleted[-]"
+			opWord, opColor = "deleted", "#ff4444"
 		case opChange:
-			curOp = "[#ffaa44]changed[-]"
+			opWord, opColor = "changed", "#ffaa44"
 		}
 	}
 
-	dv.statusBar.SetText(fmt.Sprintf(" [#aaaaaa]Line %d/%d[-]  [#555555]Type: %s[-]  [#555555]Diffs: %d[-]%s",
-		dv.currentIdx+1, displayTotal, curOp, diffCount, searchInfo))
+	searchInfo := ""
+	if len(dv.searchHits) > 0 {
+		searchInfo = fmt.Sprintf("  [%s]· search '%s' [%d/%d][-]", colorBarAcc, dv.searchTerm, dv.searchPos+1, len(dv.searchHits))
+	}
+
+	dv.statusBar.SetText(fmt.Sprintf(" [%s]Ln %d/%d · [%s]%s[%s] · %d diffs[-]%s",
+		colorBarMain, dv.currentIdx+1, displayTotal, opColor, opWord, colorBarMain, diffCount, searchInfo))
 }
