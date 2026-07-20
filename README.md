@@ -121,6 +121,90 @@ $ v -disable-cnki
 CNKI Translate disabled
 ```
 
+### genpwd - Random Password Generator
+
+Generate cryptographically secure random passwords with an interactive TUI for configuring rules.
+
+```bash
+# Interactive TUI (default) - configure rules and generate passwords
+$ v genpwd
+
+# Generate a 20-char password to stdout
+$ v genpwd -l 20
+
+# Generate 5 passwords of length 12
+$ v genpwd -l 12 -n 5
+
+# Generate and copy to clipboard
+$ v genpwd -l 16 -c
+
+# No special characters
+$ v genpwd -l 16 -ns
+```
+
+**Interactive TUI keys:**
+
+| Key | Action |
+|-----|--------|
+| `Tab` / `↑↓` | Navigate between options |
+| `Space` / `Enter` | Toggle checkbox / edit length |
+| `r` | Regenerate password |
+| `y` | Copy password to clipboard |
+| `q` | Quit |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-l N` | Password length (default 16) |
+| `-n N` | Number of passwords (non-interactive, default 1) |
+| `-c` | Copy to clipboard (non-interactive) |
+| `-nl` | Exclude lowercase letters |
+| `-nu` | Exclude uppercase letters |
+| `-nd` | Exclude digits |
+| `-ns` | Exclude special characters |
+| `-i` | Force interactive TUI mode |
+
+### jv - JSON Viewer
+
+Interactive JSON tree viewer and formatter with search, fold/unfold, and clipboard copy.
+
+```bash
+# Interactive tree viewer (from clipboard)
+$ v jv
+
+# Format (pretty-print) JSON
+$ v jv -f
+
+# Compress (minify) JSON
+$ v jv -c
+
+# Read from file
+$ v jv -file data.json
+
+# Pipe input
+$ cat data.json | v jv
+```
+
+### diff - Side-by-side Diff Viewer
+
+Interactive text comparison tool with word-level inline diff highlighting.
+
+```bash
+# Compare two files (interactive TUI)
+$ v diff -left file1.txt -right file2.txt
+
+# Compare file vs clipboard
+$ v diff -left file.txt -clip
+
+# Inline unified diff output
+$ v diff -left a.txt -right b.txt -inline
+```
+
+### fx - File Explorer
+
+Quick file listing and exploration.
+
 ## Development
 
 ### Project Structure
@@ -136,7 +220,11 @@ v/
 │   ├── pwd/             # pwd command implementation
 │   ├── tt/              # timestamp converter implementation
 │   ├── json2excel/      # JSON to Excel converter
-│   └── translate/       # Translation service
+│   ├── translate/       # Translation service
+│   ├── genpwd/          # Random password generator
+│   ├── jv/              # JSON viewer
+│   ├── diff/            # Side-by-side diff viewer
+│   └── fx/              # File explorer
 └── setting/
     └── ini.go           # Configuration management
 ```
