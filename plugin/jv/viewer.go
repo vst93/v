@@ -60,24 +60,26 @@ func BuildTree(value interface{}, key, path string, depth int, parent *JSONNode)
 }
 
 // nodeLabel returns a clean display label for a tree node.
+// Uses standard ANSI-compatible tview color tags that work on both
+// light and dark terminal backgrounds.
 func nodeLabel(node *JSONNode) string {
 	var sb strings.Builder
 
-	// Root node: show as "root" with summary
+	// Root node
 	if node.Depth == 0 && node.Key == "" {
 		switch node.Type {
 		case "object":
 			count := len(node.Children)
 			if node.Collapsed {
-				return fmt.Sprintf("[#586e75]▸[-:-:-] [#93a1a1]root[-:-:-] [#586e75]{%d}[-:-:-]", count)
+				return fmt.Sprintf("[#586e75::b]▸[-:-:-] root [#586e75]{%d}[-:-:-]", count)
 			}
-			return fmt.Sprintf("[#586e75]▾[-:-:-] [#93a1a1]root[-:-:-]")
+			return "[#586e75::b]▾[-:-:-] root"
 		case "array":
 			count := len(node.Children)
 			if node.Collapsed {
-				return fmt.Sprintf("[#586e75]▸[-:-:-] [#93a1a1]root[-:-:-] [#586e75][%d][-:-:-]", count)
+				return fmt.Sprintf("[#586e75::b]▸[-:-:-] root [#586e75][%d][-:-:-]", count)
 			}
-			return fmt.Sprintf("[#586e75]▾[-:-:-] [#93a1a1]root[-:-:-]")
+			return "[#586e75::b]▾[-:-:-] root"
 		}
 	}
 
@@ -103,7 +105,7 @@ func nodeLabel(node *JSONNode) string {
 			// Array index - dim
 			sb.WriteString(fmt.Sprintf("[#586e75]%s[-:-:-] ", node.Key))
 		} else {
-			sb.WriteString(fmt.Sprintf("[#268bd2]%s[-:-:-] ", tview.Escape(node.Key)))
+			sb.WriteString(fmt.Sprintf("[blue]%s[-:-:-] ", tview.Escape(node.Key)))
 		}
 	}
 
@@ -128,13 +130,13 @@ func nodeLabel(node *JSONNode) string {
 		if len([]rune(val)) > 60 {
 			val = string([]rune(val)[:60]) + "…"
 		}
-		sb.WriteString(fmt.Sprintf("[#859900]\"%s\"[-:-:-]", tview.Escape(val)))
+		sb.WriteString(fmt.Sprintf("[green]\"%s\"[-:-:-]", tview.Escape(val)))
 	case "number":
-		sb.WriteString(fmt.Sprintf("[#b58900]%s[-:-:-]", node.Value))
+		sb.WriteString(fmt.Sprintf("[yellow]%s[-:-:-]", node.Value))
 	case "boolean":
 		sb.WriteString(fmt.Sprintf("[#d33682]%v[-:-:-]", node.Value))
 	case "null":
-		sb.WriteString("[#dc322f]null[-:-:-]")
+		sb.WriteString("[red]null[-:-:-]")
 	}
 
 	return sb.String()
@@ -153,7 +155,6 @@ func RunInteractive(data interface{}, source string) error {
 	tree.SetBorder(true).
 		SetTitle(fmt.Sprintf(" %s ", source)).
 		SetTitleAlign(tview.AlignLeft)
-	tree.SetBackgroundColor(tcell.ColorDefault)
 
 	// Build tview tree nodes with indentation
 	var buildTViewNodes func(jn *JSONNode) *tview.TreeNode
@@ -161,7 +162,7 @@ func RunInteractive(data interface{}, source string) error {
 		node := tview.NewTreeNode(nodeLabel(jn)).
 			SetExpanded(!jn.Collapsed).
 			SetReference(jn).
-			SetIndent(2) // 2 spaces per level
+			SetIndent(2)
 
 		for _, child := range jn.Children {
 			node.AddChild(buildTViewNodes(child))
@@ -172,10 +173,10 @@ func RunInteractive(data interface{}, source string) error {
 	root := buildTViewNodes(rootNode)
 	tree.SetRoot(root).SetCurrentNode(root)
 
-	// Apply selected style to all nodes: subtle dark background
+	// Selection style: reverse video (works on both light and dark terminals)
 	var applySelectedStyle func(tn *tview.TreeNode)
 	applySelectedStyle = func(tn *tview.TreeNode) {
-		tn.SetSelectedTextStyle(tcell.StyleDefault.Background(tcell.Color236))
+		tn.SetSelectedTextStyle(tcell.StyleDefault.Reverse(true))
 		for _, child := range tn.GetChildren() {
 			applySelectedStyle(child)
 		}
@@ -203,7 +204,6 @@ func RunInteractive(data interface{}, source string) error {
 	// Info bar
 	infoBar := tview.NewTextView()
 	infoBar.SetDynamicColors(true).SetTextAlign(tview.AlignLeft)
-	infoBar.SetBackgroundColor(tcell.ColorDefault)
 	updateInfoBar := func() {
 		current := tree.GetCurrentNode()
 		ref := current.GetReference()
@@ -211,10 +211,10 @@ func RunInteractive(data interface{}, source string) error {
 			return
 		}
 		jn := ref.(*JSONNode)
-		info := fmt.Sprintf(" [#268bd2]Path[-:-:-] %s  [#268bd2]Type[-:-:-] %s",
+		info := fmt.Sprintf(" [blue]Path[-:-:-] %s  [blue]Type[-:-:-] %s",
 			jn.Path, jn.Type)
 		if jn.Type == "object" || jn.Type == "array" {
-			info += fmt.Sprintf("  [#268bd2]Items[-:-:-] %d", len(jn.Children))
+			info += fmt.Sprintf("  [blue]Items[-:-:-] %d", len(jn.Children))
 		}
 		infoBar.SetText(info)
 	}
@@ -224,7 +224,6 @@ func RunInteractive(data interface{}, source string) error {
 	helpBar := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
-	helpBar.SetBackgroundColor(tcell.ColorDefault)
 	helpBar.SetText("[#586e75]Enter fold/expand  ↑↓ navigate  c collapse all  e expand all  y copy value  p copy path  q quit[-:-:-]")
 
 	// Layout
@@ -289,11 +288,11 @@ func RunInteractive(data interface{}, source string) error {
 		updateInfoBar()
 	})
 
-	// Override tree mouse scroll to move selection instead of scrolling
+	// Mouse wheel: move selection cursor instead of just scrolling view
 	tree.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		if action == tview.MouseScrollUp {
 			tree.Move(-1)
-			return action, nil // consume: don't let TreeView's default scroll
+			return action, nil
 		}
 		if action == tview.MouseScrollDown {
 			tree.Move(1)
