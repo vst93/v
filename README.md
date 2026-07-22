@@ -121,6 +121,154 @@ $ v -disable-cnki
 CNKI Translate disabled
 ```
 
+### genpwd - Random Password Generator
+
+Generate cryptographically secure random passwords with an interactive TUI for configuring rules.
+
+**Short command:** `gp` (alias for `genpwd`)
+
+```bash
+# Interactive TUI (default) - configure rules and generate passwords
+$ v gp
+
+# Generate a 20-char password to stdout
+$ v gp -l 20
+
+# Generate 5 passwords of length 12
+$ v gp -l 12 -n 5
+
+# Generate and copy to clipboard
+$ v gp -l 16 -c
+
+# No special characters
+$ v gp -l 16 -ns
+```
+
+**Interactive TUI keys:**
+
+| Key | Action |
+|-----|--------|
+| `←` `→` | Adjust length (presets: 8 12 16 20 24 32 48 64) |
+| `Enter` | Custom length input (on length row) |
+| `Space` | Next preset / toggle checkbox |
+| `Tab` / `↑↓` | Navigate between options |
+| `r` | Regenerate password |
+| `y` | Copy password to clipboard |
+| `q` | Quit |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-l N` | Password length (default 16) |
+| `-n N` | Number of passwords (non-interactive, default 1) |
+| `-c` | Copy to clipboard (non-interactive) |
+| `-nl` | Exclude lowercase letters |
+| `-nu` | Exclude uppercase letters |
+| `-nd` | Exclude digits |
+| `-ns` | Exclude special characters |
+| `-i` | Force interactive TUI mode |
+
+### jv - JSON Viewer
+
+Editor-style JSON viewer (utools-like): line numbers, syntax highlighting, code folding,
+search panel, path filter bar, smooth mouse/touchpad scrolling, and text editing with
+graceful fallback for invalid JSON.
+
+```bash
+# Interactive viewer (from clipboard)
+$ v jv
+
+# Format (pretty-print) JSON
+$ v jv -f
+
+# Compress (minify) JSON
+$ v jv -c
+
+# Read from file
+$ v jv -file data.json
+
+# Read from URL
+$ v jv -url https://api.example.com/data
+
+# Pipe input
+$ cat data.json | v jv
+```
+
+Non-JSON input opens as plain editable text without formatting. Editing the text back
+into valid JSON automatically re-enables folding, path lookup and minified copy.
+
+Viewer keys & mouse:
+
+| Key / Mouse | Action |
+|-------------|--------|
+| `↑↓` / `j` `k` | Move cursor (`PgUp`/`PgDn` page, `g`/`G` first/last) |
+| `Enter` / `Space` / `o` | Fold / unfold at cursor |
+| `h` / `l` | Fold, jump to parent / unfold |
+| `e` / `c` | Expand / collapse all |
+| `i` | Inline edit (`Esc` done, `Ctrl-Z`/`Ctrl-Y` undo/redo) |
+| `I` | Edit in `$EDITOR` (vim/vi/nano/notepad); returns on save |
+| edit: `Shift`+arrows | Select text (`Ctrl-A` select all, `Ctrl-C`/`X`/`V` copy/cut/paste) |
+| edit: `Ctrl`+`←`/`→` | Move by word |
+| `f` | Reformat document |
+| `/` or `Ctrl-F` | Search panel (`Enter` next, `Shift-Enter` prev, `Alt-C` case, `Alt-W` word, `Alt-R` regex) |
+| `n` / `N` / `F3` | Next / previous match |
+| `Tab` | Filter bar: `.key` `[0]` `["k"]` `.length` `.map(.k)` |
+| `u` | Toggle `\uXXXX` display |
+| `F` / `M` / `E` | Copy formatted / minified / minified+`\uXXXX` escaped JSON |
+| `y` / `p` | Copy value / path at cursor |
+| wheel | Scroll view (touchpad-smooth; cursor stays put) |
+| click | Select line; double-click selects word & edits; click gutter chevron folds; drag to select text; drag scrollbar |
+| `?` / `q` | Help / quit |
+
+### diff - Side-by-side Diff Viewer
+
+Interactive text comparison tool with word-level inline diff highlighting.
+Supports file comparison, clipboard comparison, pipe input, and a paste mode
+for quick ad-hoc diffs.
+
+```bash
+# Compare two files (interactive TUI)
+$ v diff -left file1.txt -right file2.txt
+
+# Compare file vs clipboard
+$ v diff -left file.txt -clip
+
+# Compare pipe input vs file
+$ echo 'hello' | v diff -right file.txt
+
+# Paste mode: paste left/right text directly in the TUI
+$ v diff
+
+# Inline unified diff output (no TUI)
+$ v diff -left a.txt -right b.txt -inline
+```
+
+**Diff viewer keys:**
+
+| Key | Action |
+|-----|--------|
+| `↑↓` / `j` `k` | Navigate up/down |
+| `n` / `N` | Next / previous diff hunk |
+| `/` | Search (type term, Enter to jump) |
+| `c` | Show only changed lines |
+| `a` | Show all lines |
+| `e` | Edit (return to paste mode) |
+| `q` | Quit |
+
+**Paste mode keys:**
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Switch left/right panel |
+| `Ctrl-A` | Select all |
+| `Ctrl-C` / `X` / `V` | Copy / cut / paste |
+| `Ctrl-Z` / `Y` | Undo / redo |
+| `Shift`+arrows | Select text |
+| `Ctrl`+`←`/`->` | Move by word |
+| `Ctrl-D` | Compute diff |
+| `Esc` | Quit |
+
 ## Development
 
 ### Project Structure
@@ -136,7 +284,10 @@ v/
 │   ├── pwd/             # pwd command implementation
 │   ├── tt/              # timestamp converter implementation
 │   ├── json2excel/      # JSON to Excel converter
-│   └── translate/       # Translation service
+│   ├── translate/       # Translation service
+│   ├── genpwd/          # Random password generator
+│   ├── jv/              # JSON viewer
+│   ├── diff/            # Side-by-side diff viewer
 └── setting/
     └── ini.go           # Configuration management
 ```
@@ -188,7 +339,7 @@ go tool cover -func=coverage.out
 
 ## License
 
-MIT License - see LICENSE file for details.
+GNU GPL v3 - see LICENSE file for details.
 
 ## Author
 
