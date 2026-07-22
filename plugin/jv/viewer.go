@@ -37,6 +37,7 @@ var (
 	stMatchCur   = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorOrange)
 	stScrollTrak = tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
 	stScrollThum = tcell.StyleDefault.Foreground(tcell.ColorGray)
+	stSelection  = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorNavy)
 
 	stPanel    = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorDarkSlateGray)
 	stPanelDim = tcell.StyleDefault.Foreground(tcell.ColorGray).Background(tcell.ColorDarkSlateGray)
@@ -279,6 +280,11 @@ type Viewer struct {
 	lastRune   rune
 	lastRuneAt time.Time
 
+	// Selection state (edit mode).
+	selAnchorLine int
+	selAnchorCol  int
+	selActive     bool
+
 	// search state
 	searchOpen  bool
 	searchInput textInput
@@ -301,9 +307,10 @@ type Viewer struct {
 	toastAt  time.Time
 
 	// mouse state
-	lastWheel time.Time
-	dragThumb bool
-	grabRow   int
+	lastWheel      time.Time
+	dragThumb      bool
+	grabRow        int
+	mouseSelecting bool
 
 	// geometry cached during Draw for hit-testing
 	gutterW    int
@@ -514,7 +521,7 @@ func (v *Viewer) Draw(s tcell.Screen) {
 		return
 	}
 	v.editorH = h - 1
-	v.gutterW = len(strconv.Itoa(len(v.lines))) + 2
+	v.gutterW = len(strconv.Itoa(len(v.lines))) + 3
 	v.clampState()
 
 	v.hitRects = v.hitRects[:0]
@@ -565,8 +572,10 @@ func (v *Viewer) drawLine(s tcell.Screen, x, row, width, full int, isCur bool) {
 	}
 	num := strconv.Itoa(full + 1)
 	for i, ch := range num {
-		s.SetContent(x+v.gutterW-len(num)+i, row, ch, nil, gutStyle)
+		s.SetContent(x+v.gutterW-1-len(num)+i, row, ch, nil, gutStyle)
 	}
+	// Separator between gutter and content.
+	s.SetContent(x+v.gutterW-1, row, '│', nil, gutStyle)
 
 	// Content with syntax colors, horizontal scroll and match highlights.
 	cx := x + v.gutterW
@@ -581,6 +590,24 @@ func (v *Viewer) drawLine(s tcell.Screen, x, row, width, full int, isCur bool) {
 
 	col := 0
 	byteOff := 0
+	runeIdx := 0
+
+	// Selection range for this line (-1 means no selection here).
+	selStart, selEnd := -1, -1
+	if v.editing && v.hasSelection() {
+		sl, sc, el, ec := v.selBounds()
+		switch {
+		case full > sl && full < el:
+			selStart, selEnd = 0, len([]rune(v.textLines[full]))
+		case full == sl && full == el:
+			selStart, selEnd = sc, ec
+		case full == sl:
+			selStart, selEnd = sc, len([]rune(v.textLines[full]))
+		case full == el:
+			selStart, selEnd = 0, ec
+		}
+	}
+
 	drawRune := func(r rune, st tcell.Style) {
 		rw := cellWidth(r)
 		sx := cx + col - v.hscroll
@@ -610,8 +637,12 @@ func (v *Viewer) drawLine(s tcell.Screen, x, row, width, full int, isCur bool) {
 			if curSpan != nil && byteOff >= curSpan.start && byteOff < curSpan.end {
 				rst = stMatchCur
 			}
+			if selStart >= 0 && runeIdx >= selStart && runeIdx < selEnd {
+				rst = stSelection
+			}
 			drawRune(r, rst)
 			byteOff += utf8.RuneLen(r)
+			runeIdx++
 		}
 	}
 
@@ -878,6 +909,8 @@ func (v *Viewer) drawHelp(s tcell.Screen, x, y, w, h int) {
 		{"h / l", "fold, jump to parent / unfold"},
 		{"e / c", "expand / collapse all"},
 		{"i", "inline edit (Esc done, Ctrl-Z/Y undo/redo)"},
+		{"edit: select", "Shift+arrows · Ctrl-A all · Ctrl-C/X/V copy/cut/paste · Ctrl+word"},
+		{"edit: mouse", "drag select · double-click word · Shift+click extend"},
 		{"I", "edit in $EDITOR (vim/vi/nano/notepad); returns on save"},
 		{"f", "reformat document"},
 		{"/  or  Ctrl-F", "open search panel"},
@@ -988,7 +1021,7 @@ func (v *Viewer) placeCursor(s tcell.Screen) {
 // InputHandler routes key events to the focused area.
 func (v *Viewer) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 	return func(ev *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if ev.Key() == tcell.KeyCtrlC {
+		if ev.Key() == tcell.KeyCtrlC && !v.editing {
 			v.app.Stop()
 			return
 		}
@@ -1072,7 +1105,7 @@ func (v *Viewer) editorKey(ev *tcell.EventKey) {
 			v.collapseAll()
 		case 'i':
 			v.enterEdit(-1)
-			v.setToast("EDIT: Esc done · Ctrl-Z undo · Ctrl-Y redo")
+			v.setToast("EDIT: Esc done · Shift+arrows select · Ctrl-A/C/X/V · Ctrl-Z/Y")
 		case 'I':
 			v.editExternal()
 		case 'f':
@@ -1161,6 +1194,7 @@ func (v *Viewer) enterEdit(col int) {
 		return
 	}
 	v.editing = true
+	v.clearSelection()
 	v.editLine = v.visible[v.cursor]
 	n := len([]rune(v.textLines[v.editLine]))
 	if col < 0 {
@@ -1182,6 +1216,7 @@ func (v *Viewer) enterEdit(col int) {
 // exitEdit returns to normal mode.
 func (v *Viewer) exitEdit() {
 	v.editing = false
+	v.clearSelection()
 	v.cursor = v.visiblePosOf(v.editLine)
 	v.ensureCursorVisible()
 }
@@ -1194,32 +1229,62 @@ func (v *Viewer) syncEditCursor() {
 
 // editKey handles keys in edit mode.
 func (v *Viewer) editKey(ev *tcell.EventKey) {
+	sel := ev.Modifiers()&tcell.ModShift != 0
+	ctrl := ev.Modifiers()&tcell.ModCtrl != 0
 	switch ev.Key() {
 	case tcell.KeyEsc:
 		v.exitEdit()
 	case tcell.KeyTab:
 		v.exitEdit()
 		v.focus = focusFilter
-	case tcell.KeyEnter:
+	case tcell.KeyEnter, tcell.KeyCtrlJ:
+		if v.hasSelection() {
+			v.pushUndo("newline")
+			v.deleteSelection()
+		}
 		v.editNewline()
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
-		v.editBackspace()
+		if v.hasSelection() {
+			v.pushUndo("delete")
+			v.deleteSelection()
+		} else {
+			v.editBackspace()
+		}
 	case tcell.KeyDelete:
-		v.editDeleteForward()
+		if v.hasSelection() {
+			v.pushUndo("delete")
+			v.deleteSelection()
+		} else {
+			v.editDeleteForward()
+		}
 	case tcell.KeyLeft:
-		v.editMoveHoriz(-1)
+		if ctrl {
+			v.editMoveWord(-1, sel)
+		} else {
+			v.editMoveHoriz(-1, sel)
+		}
 	case tcell.KeyRight:
-		v.editMoveHoriz(1)
+		if ctrl {
+			v.editMoveWord(1, sel)
+		} else {
+			v.editMoveHoriz(1, sel)
+		}
 	case tcell.KeyUp:
-		v.editMoveVert(-1)
+		v.editMoveVert(-1, sel)
 	case tcell.KeyDown:
-		v.editMoveVert(1)
+		v.editMoveVert(1, sel)
 	case tcell.KeyHome:
-		v.editCol = 0
-		v.goalCol = 0
+		v.editHomeEnd(false, sel)
 	case tcell.KeyEnd:
-		v.editCol = len([]rune(v.textLines[v.editLine]))
-		v.goalCol = v.editCol
+		v.editHomeEnd(true, sel)
+	case tcell.KeyCtrlA:
+		v.selectAll()
+	case tcell.KeyCtrlC:
+		v.copySelection()
+	case tcell.KeyCtrlX:
+		v.cutSelection()
+	case tcell.KeyCtrlV:
+		v.pasteClipboard()
 	case tcell.KeyCtrlZ:
 		v.undoEdit()
 	case tcell.KeyCtrlY:
@@ -1232,7 +1297,12 @@ func (v *Viewer) editKey(ev *tcell.EventKey) {
 		}
 		v.lastRune = r
 		v.lastRuneAt = time.Now()
-		v.pushUndo("insert")
+		if v.hasSelection() {
+			v.pushUndo("replace")
+			v.deleteSelection()
+		} else {
+			v.pushUndo("insert")
+		}
 		v.editInsert(r)
 	}
 }
@@ -1351,7 +1421,8 @@ func (v *Viewer) editNewline() {
 // The cursor may sit at end-of-line (editCol == len) to allow appending
 // and deleting at EOL; only pressing right again past EOL crosses to
 // the next line.
-func (v *Viewer) editMoveHoriz(d int) {
+func (v *Viewer) editMoveHoriz(d int, extendSel bool) {
+	v.maybeStartSelection(extendSel)
 	v.editCol += d
 	if v.editCol < 0 {
 		pos := v.visiblePosOf(v.editLine)
@@ -1383,7 +1454,8 @@ func (v *Viewer) editMoveHoriz(d int) {
 }
 
 // editMoveVert moves the text cursor between visible lines.
-func (v *Viewer) editMoveVert(d int) {
+func (v *Viewer) editMoveVert(d int, extendSel bool) {
+	v.maybeStartSelection(extendSel)
 	pos := v.visiblePosOf(v.editLine) + d
 	if pos < 0 || pos >= len(v.visible) {
 		return
@@ -1411,6 +1483,7 @@ func (v *Viewer) undoEdit() {
 	v.editLine = s.line
 	v.editCol = s.col
 	v.lastKind = "undo"
+	v.clearSelection()
 	v.clampEditCursor()
 	v.reparse()
 	v.rebuildFromText()
@@ -1430,6 +1503,7 @@ func (v *Viewer) redoEdit() {
 	v.editLine = s.line
 	v.editCol = s.col
 	v.lastKind = "redo"
+	v.clearSelection()
 	v.clampEditCursor()
 	v.reparse()
 	v.rebuildFromText()
@@ -1451,6 +1525,310 @@ func (v *Viewer) clampEditCursor() {
 	if v.editCol < 0 {
 		v.editCol = 0
 	}
+}
+
+// --- Selection ---
+
+// hasSelection reports whether a non-empty selection exists.
+func (v *Viewer) hasSelection() bool {
+	return v.selActive && (v.selAnchorLine != v.editLine || v.selAnchorCol != v.editCol)
+}
+
+// clearSelection drops the current selection.
+func (v *Viewer) clearSelection() { v.selActive = false }
+
+// maybeStartSelection begins or extends a selection when extendSel is
+// true, or clears it otherwise.
+func (v *Viewer) maybeStartSelection(extendSel bool) {
+	if extendSel {
+		if !v.selActive {
+			v.selActive = true
+			v.selAnchorLine = v.editLine
+			v.selAnchorCol = v.editCol
+		}
+	} else {
+		v.clearSelection()
+	}
+}
+
+// selBounds returns the selection endpoints in document order:
+// (startLine, startCol, endLine, endCol).
+func (v *Viewer) selBounds() (int, int, int, int) {
+	if v.selAnchorLine < v.editLine ||
+		(v.selAnchorLine == v.editLine && v.selAnchorCol < v.editCol) {
+		return v.selAnchorLine, v.selAnchorCol, v.editLine, v.editCol
+	}
+	return v.editLine, v.editCol, v.selAnchorLine, v.selAnchorCol
+}
+
+// selectedText returns the text between the selection endpoints.
+func (v *Viewer) selectedText() string {
+	if !v.hasSelection() {
+		return ""
+	}
+	sl, sc, el, ec := v.selBounds()
+	if sl == el {
+		rs := []rune(v.textLines[sl])
+		if sc > len(rs) {
+			sc = len(rs)
+		}
+		if ec > len(rs) {
+			ec = len(rs)
+		}
+		return string(rs[sc:ec])
+	}
+	var b strings.Builder
+	rs := []rune(v.textLines[sl])
+	if sc > len(rs) {
+		sc = len(rs)
+	}
+	b.WriteString(string(rs[sc:]))
+	b.WriteByte('\n')
+	for l := sl + 1; l < el; l++ {
+		b.WriteString(v.textLines[l])
+		b.WriteByte('\n')
+	}
+	rs = []rune(v.textLines[el])
+	if ec > len(rs) {
+		ec = len(rs)
+	}
+	b.WriteString(string(rs[:ec]))
+	return b.String()
+}
+
+// deleteSelection removes the selected text and collapses the cursor
+// to the selection start.
+func (v *Viewer) deleteSelection() {
+	if !v.hasSelection() {
+		return
+	}
+	sl, sc, el, ec := v.selBounds()
+	if sl == el {
+		rs := []rune(v.textLines[sl])
+		if sc > len(rs) {
+			sc = len(rs)
+		}
+		if ec > len(rs) {
+			ec = len(rs)
+		}
+		rs = append(rs[:sc], rs[ec:]...)
+		v.textLines[sl] = string(rs)
+	} else {
+		first := []rune(v.textLines[sl])
+		last := []rune(v.textLines[el])
+		if sc > len(first) {
+			sc = len(first)
+		}
+		if ec > len(last) {
+			ec = len(last)
+		}
+		v.textLines[sl] = string(first[:sc]) + string(last[ec:])
+		v.textLines = append(v.textLines[:sl+1], v.textLines[el+1:]...)
+	}
+	v.editLine = sl
+	v.editCol = sc
+	v.goalCol = sc
+	v.clearSelection()
+	v.afterEdit()
+}
+
+// selectAll selects the entire document.
+func (v *Viewer) selectAll() {
+	if len(v.textLines) == 0 {
+		return
+	}
+	v.selActive = true
+	v.selAnchorLine = 0
+	v.selAnchorCol = 0
+	v.editLine = len(v.textLines) - 1
+	v.editCol = len([]rune(v.textLines[v.editLine]))
+	v.goalCol = v.editCol
+	v.syncEditCursor()
+}
+
+// isWordChar reports whether r is part of a word (alnum or underscore).
+func isWordChar(r rune) bool {
+	return r == '_' ||
+		(r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9')
+}
+
+// selectWord selects the word at the cursor, or the single character
+// under the cursor if it is not a word character.
+func (v *Viewer) selectWord() {
+	rs := []rune(v.textLines[v.editLine])
+	n := len(rs)
+	if n == 0 || v.editCol >= n {
+		return
+	}
+	v.selActive = true
+	v.selAnchorLine = v.editLine
+	if !isWordChar(rs[v.editCol]) {
+		v.selAnchorCol = v.editCol
+		v.editCol++
+		v.goalCol = v.editCol
+		return
+	}
+	start := v.editCol
+	for start > 0 && isWordChar(rs[start-1]) {
+		start--
+	}
+	end := v.editCol
+	for end < n && isWordChar(rs[end]) {
+		end++
+	}
+	v.selAnchorCol = start
+	v.editCol = end
+	v.goalCol = v.editCol
+}
+
+// editMoveWord moves the cursor by one word boundary.
+func (v *Viewer) editMoveWord(d int, extendSel bool) {
+	v.maybeStartSelection(extendSel)
+	rs := []rune(v.textLines[v.editLine])
+	n := len(rs)
+	if d > 0 {
+		for v.editCol < n && !isWordChar(rs[v.editCol]) {
+			v.editCol++
+		}
+		for v.editCol < n && isWordChar(rs[v.editCol]) {
+			v.editCol++
+		}
+	} else {
+		for v.editCol > 0 && !isWordChar(rs[v.editCol-1]) {
+			v.editCol--
+		}
+		for v.editCol > 0 && isWordChar(rs[v.editCol-1]) {
+			v.editCol--
+		}
+	}
+	v.goalCol = v.editCol
+	v.syncEditCursor()
+}
+
+// editHomeEnd moves to the start (toEnd=false) or end of the line.
+func (v *Viewer) editHomeEnd(toEnd bool, extendSel bool) {
+	v.maybeStartSelection(extendSel)
+	if toEnd {
+		v.editCol = len([]rune(v.textLines[v.editLine]))
+	} else {
+		v.editCol = 0
+	}
+	v.goalCol = v.editCol
+	v.syncEditCursor()
+}
+
+// --- Selection clipboard ---
+
+// copySelection copies the selected text (or current line if no
+// selection) to the clipboard.
+func (v *Viewer) copySelection() {
+	text := v.selectedText()
+	if text == "" {
+		text = v.textLines[v.editLine]
+	}
+	if err := clipboardWrite(text); err != nil {
+		v.setToast("Copy failed: " + err.Error())
+		return
+	}
+	v.setToast("Copied")
+}
+
+// cutSelection copies the selected text to the clipboard and deletes it.
+// With no selection it cuts the current line.
+func (v *Viewer) cutSelection() {
+	if !v.hasSelection() {
+		text := v.textLines[v.editLine]
+		v.pushUndo("delete")
+		v.textLines = append(v.textLines[:v.editLine], v.textLines[v.editLine+1:]...)
+		if v.editLine >= len(v.textLines) {
+			v.editLine = len(v.textLines) - 1
+		}
+		v.editCol = 0
+		v.goalCol = 0
+		v.afterEdit()
+		clipboardWrite(text)
+		v.setToast("Cut line")
+		return
+	}
+	text := v.selectedText()
+	v.pushUndo("delete")
+	v.deleteSelection()
+	clipboardWrite(text)
+	v.setToast("Cut")
+}
+
+// pasteClipboard inserts the clipboard contents at the cursor,
+// replacing any selection.
+func (v *Viewer) pasteClipboard() {
+	text, err := clipboardRead()
+	if err != nil || text == "" {
+		v.setToast("Clipboard empty")
+		return
+	}
+	v.handlePaste(text)
+}
+
+// handlePaste inserts text according to the current focus: into the
+// document (edit mode), the search input, or the filter input.
+func (v *Viewer) handlePaste(text string) {
+	switch v.focus {
+	case focusSearch:
+		for _, r := range text {
+			v.searchInput.insert(r)
+		}
+		v.runSearch()
+	case focusFilter:
+		for _, r := range text {
+			v.filterInput.insert(r)
+		}
+	default:
+		if !v.editing {
+			v.enterEdit(-1)
+			if !v.editing {
+				return // enterEdit failed (e.g. filter active)
+			}
+		}
+		v.pushUndo("paste")
+		if v.hasSelection() {
+			v.deleteSelection()
+		}
+		v.editInsertText(text)
+	}
+}
+
+// editInsertText inserts a (possibly multi-line) string at the cursor.
+func (v *Viewer) editInsertText(text string) {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	parts := strings.Split(text, "\n")
+
+	rs := []rune(v.textLines[v.editLine])
+	if v.editCol > len(rs) {
+		v.editCol = len(rs)
+	}
+	before := string(rs[:v.editCol])
+	after := string(rs[v.editCol:])
+
+	if len(parts) == 1 {
+		v.textLines[v.editLine] = before + parts[0] + after
+		v.editCol += len([]rune(parts[0]))
+	} else {
+		newLines := make([]string, 0, len(v.textLines)+len(parts))
+		newLines = append(newLines, v.textLines[:v.editLine]...)
+		newLines = append(newLines, before+parts[0])
+		for i := 1; i < len(parts)-1; i++ {
+			newLines = append(newLines, parts[i])
+		}
+		newLines = append(newLines, parts[len(parts)-1]+after)
+		newLines = append(newLines, v.textLines[v.editLine+1:]...)
+		v.textLines = newLines
+		v.editLine += len(parts) - 1
+		v.editCol = len([]rune(parts[len(parts)-1]))
+	}
+	v.goalCol = v.editCol
+	v.afterEdit()
 }
 
 // editExternal launches an external editor ($EDITOR, falling back to
@@ -1588,6 +1966,7 @@ func (v *Viewer) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(
 					v.cursor = idx
 					col := v.colFromX(v.visible[idx], mx-x-v.gutterW+v.hscroll)
 					v.enterEdit(col)
+					v.selectWord()
 				}
 			}
 			return true, v
@@ -1604,7 +1983,14 @@ func (v *Viewer) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(
 			case mx == x+w-1 && my >= y && my < y+v.editorH:
 				v.scrollbarClick(my - y)
 			case my >= y && my < y+v.editorH:
-				v.editorClick(mx-x, my-y)
+				if v.editing && ev.Modifiers()&tcell.ModShift != 0 && mx-x >= v.gutterW {
+					v.editorDrag(mx-x, my-y)
+				} else {
+					v.editorClick(mx-x, my-y)
+					if v.editing && mx-x >= v.gutterW {
+						v.mouseSelecting = true
+					}
+				}
 			}
 			return true, v
 		case tview.MouseMove:
@@ -1612,8 +1998,13 @@ func (v *Viewer) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(
 				v.thumbDrag(my - y)
 				return true, v
 			}
+			if v.mouseSelecting && v.editing && mx >= x+v.gutterW && mx < x+w-1 {
+				v.editorDrag(mx-x, my-y)
+				return true, v
+			}
 		case tview.MouseLeftUp:
 			v.dragThumb = false
+			v.mouseSelecting = false
 		}
 		return true, v
 	}
@@ -1660,6 +2051,9 @@ func (v *Viewer) editorClick(col, row int) {
 			v.editLine = full
 			v.editCol = v.colFromX(full, col-v.gutterW+v.hscroll)
 			v.goalCol = v.editCol
+			v.selActive = true
+			v.selAnchorLine = v.editLine
+			v.selAnchorCol = v.editCol
 		}
 		v.cursor = idx
 		return
@@ -1673,6 +2067,36 @@ func (v *Viewer) editorClick(col, row int) {
 		return
 	}
 	v.cursor = idx
+}
+
+// editorDrag extends the selection to the given screen position,
+// auto-scrolling when the mouse leaves the viewport.
+func (v *Viewer) editorDrag(col, row int) {
+	if row < 0 {
+		v.scroll += row
+		v.clampState()
+		row = 0
+	}
+	if row >= v.editorH {
+		v.scroll += row - v.editorH + 1
+		v.clampState()
+		row = v.editorH - 1
+	}
+	idx := v.scroll + row
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(v.visible) {
+		idx = len(v.visible) - 1
+	}
+	full := v.visible[idx]
+	v.editLine = full
+	if col >= v.gutterW {
+		v.editCol = v.colFromX(full, col-v.gutterW+v.hscroll)
+		v.goalCol = v.editCol
+	}
+	v.cursor = idx
+	v.syncEditCursor()
 }
 
 // colFromX converts a screen cell offset within a line to a rune column.

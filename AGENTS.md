@@ -168,7 +168,7 @@ Three parallel styling mechanisms — pick by context:
 `github.com/atotto/clipboard` - `clipboard.WriteAll` (pwd, genpwd, jv/clipboard.go wrapper) and `clipboard.ReadAll` (jv default source, `diff -clip`).
 
 ### Notable per-plugin internals
-- **jv**: custom `lexer.go` tolerates *invalid/in-progress* JSON for live syntax highlighting; `filter.go` implements a jq-like DSL (`.key`, `["k"]`, `[0]`, `[-1]`, `.length`, `.map(.k)`); full editor with undo/redo + `$EDITOR` integration; `-url` fetches JSON via `net/http` (30s timeout).
+- **jv**: custom `lexer.go` tolerates *invalid/in-progress* JSON for live syntax highlighting; `filter.go` implements a jq-like DSL (`.key`, `["k"]`, `[0]`, `[-1]`, `.length`, `.map(.k)`); full editor with undo/redo + `$EDITOR` integration; edit-mode text selection (Shift+arrows, Ctrl-A/C/X/V, word nav, mouse drag); `-url` fetches JSON via `net/http` (30s timeout).
 - **diff**: `myers.go` is a from-scratch Myers shortest-edit-script (V-array as `map[int]int`); `opChange` sentinel (`Op=99`) pairs changed lines; word-level inline diff reuses `myersDiff` over word tokens.
 - **translate/cnki.go**: AES-ECB with hardcoded key `4e87183cfd3a45fe`, PKCS7 padding hand-rolled, cookie cached in `/tmp/v_cookie`. Uses deprecated `ioutil` — prefer `os`/`io` for new code.
 - **json2excel/implement.go**: `JSONProcessor` with `Flatten`/`Escape`/`KeyDrill`; default output `~/Downloads/export_<unixnano>.xlsx`; CSV gets UTF-8 BOM via `golang.org/x/text/transform`.

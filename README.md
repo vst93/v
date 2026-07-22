@@ -208,6 +208,8 @@ Viewer keys & mouse:
 | `e` / `c` | Expand / collapse all |
 | `i` | Inline edit (`Esc` done, `Ctrl-Z`/`Ctrl-Y` undo/redo) |
 | `I` | Edit in `$EDITOR` (vim/vi/nano/notepad); returns on save |
+| edit: `Shift`+arrows | Select text (`Ctrl-A` select all, `Ctrl-C`/`X`/`V` copy/cut/paste) |
+| edit: `Ctrl`+`←`/`→` | Move by word |
 | `f` | Reformat document |
 | `/` or `Ctrl-F` | Search panel (`Enter` next, `Shift-Enter` prev, `Alt-C` case, `Alt-W` word, `Alt-R` regex) |
 | `n` / `N` / `F3` | Next / previous match |
@@ -216,12 +218,14 @@ Viewer keys & mouse:
 | `F` / `M` / `E` | Copy formatted / minified / minified+`\uXXXX` escaped JSON |
 | `y` / `p` | Copy value / path at cursor |
 | wheel | Scroll view (touchpad-smooth; cursor stays put) |
-| click | Select line; double-click for quick inline edit; click gutter chevron folds; drag scrollbar |
+| click | Select line; double-click selects word & edits; click gutter chevron folds; drag to select text; drag scrollbar |
 | `?` / `q` | Help / quit |
 
 ### diff - Side-by-side Diff Viewer
 
 Interactive text comparison tool with word-level inline diff highlighting.
+Supports file comparison, clipboard comparison, pipe input, and a paste mode
+for quick ad-hoc diffs.
 
 ```bash
 # Compare two files (interactive TUI)
@@ -230,9 +234,40 @@ $ v diff -left file1.txt -right file2.txt
 # Compare file vs clipboard
 $ v diff -left file.txt -clip
 
-# Inline unified diff output
+# Compare pipe input vs file
+$ echo 'hello' | v diff -right file.txt
+
+# Paste mode: paste left/right text directly in the TUI
+$ v diff
+
+# Inline unified diff output (no TUI)
 $ v diff -left a.txt -right b.txt -inline
 ```
+
+**Diff viewer keys:**
+
+| Key | Action |
+|-----|--------|
+| `↑↓` / `j` `k` | Navigate up/down |
+| `n` / `N` | Next / previous diff hunk |
+| `/` | Search (type term, Enter to jump) |
+| `c` | Show only changed lines |
+| `a` | Show all lines |
+| `e` | Edit (return to paste mode) |
+| `q` | Quit |
+
+**Paste mode keys:**
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Switch left/right panel |
+| `Ctrl-A` | Select all |
+| `Ctrl-C` / `X` / `V` | Copy / cut / paste |
+| `Ctrl-Z` / `Y` | Undo / redo |
+| `Shift`+arrows | Select text |
+| `Ctrl`+`←`/`->` | Move by word |
+| `Ctrl-D` | Compute diff |
+| `Esc` | Quit |
 
 ## Development
 
@@ -304,7 +339,7 @@ go tool cover -func=coverage.out
 
 ## License
 
-MIT License - see LICENSE file for details.
+GNU GPL v3 - see LICENSE file for details.
 
 ## Author
 

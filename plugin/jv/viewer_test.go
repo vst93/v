@@ -402,3 +402,303 @@ func TestDrawSmoke(t *testing.T) {
 		t.Errorf("fold placeholder not rendered after folding root")
 	}
 }
+
+func TestSelectionShiftArrows(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	v.enterEdit(2) // col 2 = opening quote of key
+
+	// Shift+Right selects one char.
+	v.editKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+	if !v.hasSelection() {
+		t.Fatal("expected selection after Shift+Right")
+	}
+	if got := v.selectedText(); got != `"` {
+		t.Errorf("selectedText = %q, want %q", got, `"`)
+	}
+
+	// Shift+Right again extends.
+	v.editKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+	if got := v.selectedText(); got != `"a` {
+		t.Errorf("selectedText = %q, want %q", got, `"a`)
+	}
+
+	// Plain Right clears selection.
+	v.editKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	if v.hasSelection() {
+		t.Error("selection should be cleared after plain Right")
+	}
+}
+
+func TestSelectAll(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	want := strings.Join(v.textLines, "\n")
+	v.enterEdit(0)
+	v.editKey(tcell.NewEventKey(tcell.KeyCtrlA, 0, tcell.ModNone))
+	if !v.hasSelection() {
+		t.Fatal("expected selection after Ctrl-A")
+	}
+	if got := v.selectedText(); got != want {
+		t.Errorf("selectedText = %q, want %q", got, want)
+	}
+}
+
+func TestDeleteSelection(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	v.enterEdit(2) // `"`
+	v.editKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+	v.editKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+	// Selected `"a` from cols 2-4.
+	v.editKey(tcell.NewEventKey(tcell.KeyBackspace, 0, tcell.ModNone))
+	if got, want := v.textLines[1], `  ": 1`; got != want {
+		t.Errorf("line 1 = %q, want %q", got, want)
+	}
+	if v.hasSelection() {
+		t.Error("selection should be cleared after delete")
+	}
+}
+
+func TestTypeReplacesSelection(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	v.enterEdit(3) // 'a'
+	v.selectWord()
+	if got := v.selectedText(); got != "a" {
+		t.Fatalf("selectedText = %q, want %q", got, "a")
+	}
+	v.editKey(tcell.NewEventKey(tcell.KeyRune, 'b', tcell.ModNone))
+	if !strings.Contains(v.textLines[1], `"b"`) {
+		t.Errorf("line 1 = %q, expected 'b' replacing 'a'", v.textLines[1])
+	}
+	if v.hasSelection() {
+		t.Error("selection should be cleared after typing")
+	}
+}
+
+func TestSelectWord(t *testing.T) {
+	v := newTestViewer(t, `{"name":"jv"}`)
+	v.cursor = 1
+	v.enterEdit(3) // 'n' in name
+	v.selectWord()
+	if !v.hasSelection() {
+		t.Fatal("expected selection after selectWord")
+	}
+	if got := v.selectedText(); got != "name" {
+		t.Errorf("selectedText = %q, want %q", got, "name")
+	}
+}
+
+func TestWordMovement(t *testing.T) {
+	v := newTestViewer(t, `{"name":"jv"}`)
+	v.cursor = 1
+	v.enterEdit(3) // 'n' in name
+
+	// Ctrl+Right moves past "name" to the closing quote (col 7).
+	v.editKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModCtrl))
+	if v.editCol != 7 {
+		t.Errorf("after Ctrl+Right editCol = %d, want 7", v.editCol)
+	}
+
+	// Ctrl+Left moves back to 'n' (col 3).
+	v.editKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModCtrl))
+	if v.editCol != 3 {
+		t.Errorf("after Ctrl+Left editCol = %d, want 3", v.editCol)
+	}
+}
+
+func TestShiftHomeEnd(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	v.enterEdit(5) // ':'
+
+	v.editKey(tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModShift))
+	if !v.hasSelection() {
+		t.Fatal("expected selection after Shift+Home")
+	}
+	if v.editCol != 0 {
+		t.Errorf("editCol = %d, want 0", v.editCol)
+	}
+
+	v.editKey(tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModShift))
+	end := len([]rune(v.textLines[v.editLine]))
+	if v.editCol != end {
+		t.Errorf("editCol = %d, want %d", v.editCol, end)
+	}
+}
+
+func TestSelectionMultiLine(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	// textLines: ["{", "  \"a\": 1", "}"]
+	v.enterEdit(0)
+	// Select from line 0 col 0 to line 2 col 1.
+	v.selActive = true
+	v.selAnchorLine = 0
+	v.selAnchorCol = 0
+	v.editLine = 2
+	v.editCol = 1
+	want := "{\n  \"a\": 1\n}"
+	if got := v.selectedText(); got != want {
+		t.Errorf("selectedText = %q, want %q", got, want)
+	}
+}
+
+func TestEditInsertText(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	v.enterEdit(3) // 'a'
+	v.editInsertText("XX")
+	if !strings.Contains(v.textLines[1], `"XXa"`) {
+		t.Errorf("line 1 = %q, expected 'XXa'", v.textLines[1])
+	}
+}
+
+func TestEditInsertTextMultiLine(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	v.enterEdit(3) // 'a'
+	before := len(v.textLines)
+	v.editInsertText("x\ny")
+	if len(v.textLines) != before+1 {
+		t.Errorf("lines = %d, want %d", len(v.textLines), before+1)
+	}
+	if v.textLines[1] != `  "x` {
+		t.Errorf("line 1 = %q, want %q", v.textLines[1], `  "x`)
+	}
+	if v.textLines[2] != `ya": 1` {
+		t.Errorf("line 2 = %q, want %q", v.textLines[2], `ya": 1`)
+	}
+}
+
+func TestSelectionDraw(t *testing.T) {
+	s := tcell.NewSimulationScreen("UTF-8")
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Fini()
+	s.SetSize(80, 24)
+
+	v := newViewer(nil, `{"a":1}`, "test", false)
+	v.SetRect(0, 0, 80, 24)
+	v.cursor = 1
+	v.enterEdit(2)
+	v.editKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+	v.editKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+
+	v.Draw(s)
+	s.Show()
+
+	_, selBg, _ := stSelection.Decompose()
+	found := false
+	for x := 0; x < 40; x++ {
+		_, _, st, _ := s.GetContent(x, 1)
+		_, bg, _ := st.Decompose()
+		if bg == selBg {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("no selection-highlighted cells found on line 1")
+	}
+}
+
+func TestUndoClearsSelection(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	v.enterEdit(2)
+	// Type something to create an undo checkpoint.
+	v.editKey(tcell.NewEventKey(tcell.KeyRune, 'X', tcell.ModNone))
+	// Select.
+	v.editKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+	if !v.hasSelection() {
+		t.Fatal("expected selection")
+	}
+	// Undo restores pre-edit state and clears selection.
+	v.editKey(tcell.NewEventKey(tcell.KeyCtrlZ, 0, tcell.ModNone))
+	if v.hasSelection() {
+		t.Error("selection should be cleared after undo")
+	}
+}
+
+func TestPasteHandler(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	v.enterEdit(3) // 'a'
+
+	v.handlePaste("hello")
+
+	if !strings.Contains(v.textLines[1], "hello") {
+		t.Errorf("line 1 = %q, expected 'hello' pasted", v.textLines[1])
+	}
+}
+
+func TestPasteMultiLine(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	v.enterEdit(0)
+	before := len(v.textLines)
+
+	v.handlePaste("x\ny\nz")
+
+	if len(v.textLines) != before+2 {
+		t.Errorf("lines = %d, want %d", len(v.textLines), before+2)
+	}
+	if v.textLines[1] != "x" {
+		t.Errorf("line 1 = %q, want %q", v.textLines[1], "x")
+	}
+	if v.textLines[3] != `z  "a": 1` {
+		t.Errorf("line 3 = %q, want %q", v.textLines[3], `z  "a": 1`)
+	}
+}
+
+func TestPasteAutoEnterEdit(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	// Not in edit mode - handlePaste should auto-enter edit mode.
+	v.handlePaste("hello")
+	if !v.editing {
+		t.Fatal("expected editing mode after paste")
+	}
+	if !strings.Contains(v.textLines[1], "hello") {
+		t.Errorf("line 1 = %q, expected 'hello' pasted", v.textLines[1])
+	}
+}
+
+func TestCtrlJAsNewline(t *testing.T) {
+	v := newTestViewer(t, `{"a":1}`)
+	v.cursor = 1
+	v.enterEdit(0) // start of line 1
+	before := len(v.textLines)
+	// KeyCtrlJ (tcell's mapping for \n) should act as Enter.
+	v.editKey(tcell.NewEventKey(tcell.KeyCtrlJ, 0, tcell.ModCtrl))
+	if len(v.textLines) != before+1 {
+		t.Errorf("lines = %d, want %d", len(v.textLines), before+1)
+	}
+}
+
+func TestGutterSeparator(t *testing.T) {
+	s := tcell.NewSimulationScreen("UTF-8")
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Fini()
+	s.SetSize(80, 24)
+
+	v := newViewer(nil, sampleJSON, "test", false)
+	v.SetRect(0, 0, 80, 24)
+	v.Draw(s)
+	s.Show()
+
+	sepX := v.gutterW - 1
+	ch, _, _, _ := s.GetContent(sepX, 0)
+	if ch != '│' {
+		t.Errorf("gutter separator at x=%d = %q, want '│'", sepX, ch)
+	}
+
+	// Content should start after the separator.
+	ch, _, _, _ = s.GetContent(v.gutterW, 0)
+	if ch == '│' {
+		t.Error("content area should not start with separator")
+	}
+}

@@ -6,3 +6,8 @@ import "github.com/atotto/clipboard"
 func clipboardWrite(text string) error {
 	return clipboard.WriteAll(text)
 }
+
+// clipboardRead reads text from the system clipboard.
+func clipboardRead() (string, error) {
+	return clipboard.ReadAll()
+}

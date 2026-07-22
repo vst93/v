@@ -259,6 +259,12 @@ func (j *Jv) printHelp() {
 	fmt.Println("  ?          Help overlay         q  Quit")
 	fmt.Println("  Mouse: wheel scrolls view, click selects, double-click edits, gutter folds")
 	fmt.Println()
+	fmt.Println("Edit mode:")
+	fmt.Println("  Shift+arrows  Select text       Ctrl-A  Select all")
+	fmt.Println("  Ctrl-C/X/V    Copy/cut/paste    Ctrl+←/->  Move by word")
+	fmt.Println("  Double-click  Select word       Drag    Select range")
+	fmt.Println("  Shift+click   Extend selection")
+	fmt.Println()
 	fmt.Println("Non-JSON input is opened as plain editable text without formatting.")
 }
 

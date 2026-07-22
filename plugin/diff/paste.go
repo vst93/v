@@ -54,13 +54,24 @@ func (pv *PasteViewer) buildInput() {
 	pv.statusBar = tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignLeft)
 	pv.helpBar = tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	pv.helpBar.SetText(helpText([]helpItem{
-		{"Tab", "switch"}, {"Ctrl+D", "diff"}, {"Ctrl+C", "quit"},
+		{"Tab", "switch"}, {"^A", "all"}, {"^C/X/V", "copy/cut/paste"}, {"^D", "diff"}, {"Esc", "quit"},
 	}))
 
 	// Keep titles and the status bar in sync as the user types or pastes.
 	refresh := func() { pv.refreshInputStatus() }
 	pv.leftArea.SetChangedFunc(refresh)
 	pv.rightArea.SetChangedFunc(refresh)
+
+	// Convert KeyCtrlJ (tcell's mapping for \n) to KeyEnter so that
+	// pasted newlines are handled correctly by TextArea.
+	ctrlJFix := func(ev *tcell.EventKey) *tcell.EventKey {
+		if ev.Key() == tcell.KeyCtrlJ {
+			return tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
+		}
+		return ev
+	}
+	pv.leftArea.SetInputCapture(ctrlJFix)
+	pv.rightArea.SetInputCapture(ctrlJFix)
 
 	leftPanel := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(pv.leftTitle, 1, 0, false).
@@ -102,10 +113,10 @@ func lineCount(s string) int {
 	return strings.Count(s, "\n") + 1
 }
 
-// inputCapture handles Tab (switch panel), Ctrl+D (compute diff), and Ctrl+C
-// (quit). All other keys pass through to the focused TextArea so the user can
-// type and paste freely. 'q' cannot be used to quit here because it would be
-// inserted into the text area.
+// inputCapture handles Tab (switch panel), Ctrl+D (compute diff), Escape
+// (quit), and remaps standard editing shortcuts to TextArea's internal
+// bindings: Ctrl-A -> Ctrl-L (select all), Ctrl-C -> Ctrl-Q (copy).
+// Ctrl-X (cut) and Ctrl-V (paste) are handled by TextArea natively.
 func (pv *PasteViewer) inputCapture(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyTab:
@@ -118,9 +129,16 @@ func (pv *PasteViewer) inputCapture(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyCtrlD:
 		pv.computeDiff()
 		return nil
-	case tcell.KeyCtrlC:
+	case tcell.KeyEscape:
 		pv.app.Stop()
 		return nil
+	case tcell.KeyCtrlA:
+		// Select all: TextArea uses Ctrl-L for this.
+		return tcell.NewEventKey(tcell.KeyCtrlL, 0, tcell.ModNone)
+	case tcell.KeyCtrlC:
+		// Copy: TextArea uses Ctrl-Q. Returning a different event also
+		// prevents tview's built-in Ctrl-C quit.
+		return tcell.NewEventKey(tcell.KeyCtrlQ, 0, tcell.ModNone)
 	}
 	return event
 }
