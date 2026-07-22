@@ -210,6 +210,37 @@ Three parallel styling mechanisms — pick by context:
 - **Style**: flat tests, no `t.Run` subtests (except none currently). The only table-driven test is `TestEvalFilter` (`cases := []struct{expr,want string}{}`). Inline raw-string fixtures; no `testdata/`, no golden files, no build tags.
 - **CI gate**: ⚠️ `.github/workflows/release.yml` builds and publishes release assets but does **NOT** run `go test` or `go vet`. There is no test/lint gate before release. Run `go test ./...` and `go vet ./...` locally before tagging a release.
 
+## Release Process
+
+1. `git checkout main && git pull origin main` — ensure local main is up to date.
+2. Check existing tags: `git tag --sort=-v:refname | head -5` — last tag is the current version.
+3. Increment patch: `0.0.5` → `0.0.6` (tag has **no** `v` prefix).
+4. Gather commits since last tag: `git log <last_tag>..origin/main --oneline --no-merges`.
+5. Create release with title and notes:
+   ```bash
+   gh release create <version> --target main --title "<version>" --notes "<notes>"
+   ```
+   - **Title** must be the version string itself (e.g. `0.0.6`), NOT empty — empty title makes GitHub auto-fill with commit message.
+   - **Release notes**: group commits into sections (New Plugins / Improvements / Changes), written in Chinese. Don't leave notes empty.
+6. `.github/workflows/release.yml` auto-triggers on `release: created` — builds 7 binaries (linux/windows/darwin/android × amd64/arm64, excluding windows/arm64), zips + SHA256, uploads to the release.
+7. `gh run watch <run_id>` to monitor build status.
+8. Verify: `gh release view <version>` — check title, notes, and assets (16 files = 7 zips + 7 sha256 + 2 source).
+
+**Release notes format** (Chinese, grouped):
+```
+## 新增插件
+
+- **插件名**: 一句话描述
+
+## 改进
+
+- 插件名: 具体改进点
+
+## 变更
+
+- 移除/变更的内容
+```
+
 ## Adding a New Plugin
 
 1. `cp -r plugin/template plugin/<name>` (or create `plugin/<name>/<name>.go`).
