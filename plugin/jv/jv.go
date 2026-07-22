@@ -2,8 +2,11 @@ package plugin_jv
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/atotto/clipboard"
 )
@@ -30,6 +33,7 @@ func (j *Jv) Init() error {
 		"-i":    "Interactive tree viewer (default when no flag given)",
 		"-sort": "Sort object keys alphabetically",
 		"-file": "Read from file path instead of clipboard",
+		"-url":  "Read from URL (HTTP/HTTPS)",
 		"-raw":  "Disable colored output (plain text)",
 		"-pipe": "Read from pipe/stdin (auto-detected)",
 	}
@@ -51,6 +55,7 @@ func (j *Jv) Run(args []string) error {
 	var (
 		mode     string // "format", "compress", "escape", "unescape", "interactive"
 		filePath string
+		url      string
 		raw      bool
 		sortKeys bool
 		pipeData string
@@ -79,6 +84,11 @@ func (j *Jv) Run(args []string) error {
 		case "-file", "--file":
 			if i+1 < len(args) {
 				filePath = args[i+1]
+				i++
+			}
+		case "-url", "--url":
+			if i+1 < len(args) {
+				url = args[i+1]
 				i++
 			}
 		case "-pipe", "--pipe":
@@ -110,6 +120,13 @@ func (j *Jv) Run(args []string) error {
 		}
 		inputData = string(data)
 		source = filePath
+	case url != "":
+		data, err := fetchURL(url)
+		if err != nil {
+			return err
+		}
+		inputData = data
+		source = url
 	default:
 		// Read from clipboard
 		content, err := clipboard.ReadAll()
@@ -210,6 +227,7 @@ func (j *Jv) printHelp() {
 	fmt.Println("Usage:")
 	fmt.Println("  v jv [flags]           Read from clipboard")
 	fmt.Println("  v jv -file <path>      Read from file")
+	fmt.Println("  v jv -url <url>        Read from URL")
 	fmt.Println("  echo '{...}' | v jv    Read from pipe/stdin")
 	fmt.Println()
 	fmt.Println("Modes:")
@@ -223,6 +241,7 @@ func (j *Jv) printHelp() {
 	fmt.Println("  -sort      Sort object keys alphabetically")
 	fmt.Println("  -raw       Disable colored output (with -f)")
 	fmt.Println("  -file      Read from file path")
+	fmt.Println("  -url       Read from URL (HTTP/HTTPS)")
 	fmt.Println("  -h         Show this help")
 	fmt.Println()
 	fmt.Println("Interactive viewer keys:")
@@ -253,4 +272,22 @@ func expandHome(path string) string {
 		return path
 	}
 	return home + path[1:]
+}
+
+// fetchURL performs an HTTP GET and returns the response body.
+func fetchURL(url string) (string, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch URL: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+	return string(data), nil
 }

@@ -34,14 +34,13 @@ stdin/pipe ──► main.go ──► service.Plugin{}.List() ──► matched
 - `PluginInfo` struct L27-35; `Plugin` struct L36; `GetInfo` L38; `Info` L49.
 - `List()` L60 (value receiver) — constructs the slice, calls `Init()` on each at L71-73, returns. `Init()` is effectively the constructor.
 
-**Registered plugins** (`service/plugin.go` import block L3-12, `List()` body L61-74) — all 8 are registered:
+**Registered plugins** (`service/plugin.go` import block L3-12, `List()` body L61-74) - all 7 are registered:
 
 | Command | Plugin struct | Alias | Purpose |
 |---|---|---|---|
 | `v json2excel` | `Json2Excel` | — | JSON → .xlsx/CSV with dot-path key drill + flatten |
 | `v jv` | `Jv` | — | JSON viewer/formatter + interactive TUI tree (default mode) |
-| `v diff` | `Diff` | — | Side-by-side text diff (Myers) with inline word highlighting |
-| `v fx` | `Fx` | — | Wraps external `fx` binary; pipes clipboard (URL/file/JSON) to it |
+| `v diff` | `Diff` | - | Side-by-side text diff (Myers) with inline word highlighting |
 | `v genpwd` | `Genpwd` | `gp` | CSPRNG password generator with interactive TUI |
 | `v pwd` | `Pwd` | — | Print cwd + copy to clipboard |
 | `v tt` | `TT` | — | Unix timestamp ↔ date string conversion |
@@ -67,7 +66,6 @@ v/
 │   ├── genpwd/             # genpwd.go (crypto/rand + Fisher-Yates) + viewer.go (TUI form)
 │   ├── jv/                 # jv.go + viewer.go (~2162-line TUI) + lexer.go + filter.go + format.go + orderedmap.go + clipboard.go
 │   ├── diff/               # diff.go + myers.go (Myers from scratch) + viewer.go (dual tview.TextView)
-│   ├── fx/                 # fx.go (clipboard sniffer → external fx binary)
 │   └── template/           # Scaffold; NOT registered
 ├── cmd/install.sh          # Bash installer: download latest release zip, SHA256-verify, install
 ├── .github/workflows/release.yml  # Release build matrix (linux/windows/darwin/android × amd64/arm64)
@@ -148,7 +146,7 @@ for key, arg := range args {
 Pipe data arrives as a trailing `-pipe <data>` pair; plugins read it as a value flag.
 
 ### Error handling
-- Wrap with `fmt.Errorf("...: %w", err)` (pwd, diff, genpwd, jv, fx).
+- Wrap with `fmt.Errorf("...: %w", err)` (pwd, diff, genpwd, jv).
 - ⚠️ Inconsistent: `translate/tr.go` and `json2excel/implement.go` use `%v` instead of `%w`. Prefer `%w` for new code.
 - Plugins return errors; `main.go` prints and returns. `setting.InitSetting()` **panics** on init failure (the only panic path).
 - Never `_ = err`.
@@ -167,16 +165,15 @@ Three parallel styling mechanisms — pick by context:
 - `jv/orderedmap.go` — `OrderedMap` preserves JSON key insertion order via `json.Decoder` + `UseNumber`.
 
 ### Clipboard
-`github.com/atotto/clipboard` — `clipboard.WriteAll` (pwd, genpwd, jv/clipboard.go wrapper) and `clipboard.ReadAll` (jv default source, `diff -clip`, `fx` primary input).
+`github.com/atotto/clipboard` - `clipboard.WriteAll` (pwd, genpwd, jv/clipboard.go wrapper) and `clipboard.ReadAll` (jv default source, `diff -clip`).
 
 ### Notable per-plugin internals
-- **jv**: custom `lexer.go` tolerates *invalid/in-progress* JSON for live syntax highlighting; `filter.go` implements a jq-like DSL (`.key`, `["k"]`, `[0]`, `[-1]`, `.length`, `.map(.k)`); full editor with undo/redo + `$EDITOR` integration.
+- **jv**: custom `lexer.go` tolerates *invalid/in-progress* JSON for live syntax highlighting; `filter.go` implements a jq-like DSL (`.key`, `["k"]`, `[0]`, `[-1]`, `.length`, `.map(.k)`); full editor with undo/redo + `$EDITOR` integration; `-url` fetches JSON via `net/http` (30s timeout).
 - **diff**: `myers.go` is a from-scratch Myers shortest-edit-script (V-array as `map[int]int`); `opChange` sentinel (`Op=99`) pairs changed lines; word-level inline diff reuses `myersDiff` over word tokens.
 - **translate/cnki.go**: AES-ECB with hardcoded key `4e87183cfd3a45fe`, PKCS7 padding hand-rolled, cookie cached in `/tmp/v_cookie`. Uses deprecated `ioutil` — prefer `os`/`io` for new code.
 - **json2excel/implement.go**: `JSONProcessor` with `Flatten`/`Escape`/`KeyDrill`; default output `~/Downloads/export_<unixnano>.xlsx`; CSV gets UTF-8 BOM via `golang.org/x/text/transform`.
 - **genpwd**: `crypto/rand.Int` CSPRNG, guarantees ≥1 char per selected set, then Fisher-Yates shuffle; entropy = `log2(charset)*length`.
-- **fx**: only plugin with NO `-pipe` handling — clipboard-only input; requires external `fx` binary (`exec.LookPath`).
-- **tt/implement.go**: bidirectional heuristic — input containing `-` → date→timestamp (`time.Parse`); else timestamp→date; truncates >10-digit timestamps to 10 for millisecond compat.
+- **tt/implement.go**: bidirectional heuristic - input containing `-` → date→timestamp (`time.Parse`); else timestamp→date; truncates >10-digit timestamps to 10 for millisecond compat.
 
 ### Duplicated helpers
 `expandHome(path)` is copy-pasted in `jv.go` and `diff.go`. If you need it elsewhere, prefer copying the local pattern over introducing a shared util (no shared util package exists).
@@ -202,15 +199,14 @@ Three parallel styling mechanisms — pick by context:
 - **Runtime**: Go 1.24.3 only. No Node/Bun/Python runtime involvement.
 - **Package manager**: Go modules (`go mod`). Run `go mod tidy` after adding deps.
 - **Config location**: `~/.v_tools/settings.ini` (user home, NOT the project dir). Created on first run by `InitSetting()`.
-- **External dependency**: `v fx` requires the external `fx` binary installed separately (`brew install fx`, `go install`, or `scoop`).
-- **No Makefile/Taskfile** — all build logic lives in `.github/workflows/release.yml`; use `go build` directly.
+- **No Makefile/Taskfile** - all build logic lives in `.github/workflows/release.yml`; use `go build` directly.
 - **Target binary name** is `v` (matches `.gitignore` entry and `BINARY_PREFIX` in CI). Don't commit the `v` binary.
 
 ## Testing & QA
 
 - **Framework**: stdlib `testing` only. Assertions via `t.Errorf` / `t.Fatalf` / `t.Helper()`. No testify (present transitively via tview, never imported). No mocks/fakes.
 - **TUI tests**: `github.com/gdamore/tcell/v2` `NewSimulationScreen("UTF-8")` drives `Draw()` headlessly; assertions via `s.GetContent(x,y)` / `s.GetCursor()`.
-- **Coverage reality**: ONLY `plugin/jv` has tests — 2 files, 20 funcs, white-box (`package plugin_jv`, accesses unexported fields). Zero tests in `pwd`, `tt`, `json2excel`, `translate`, `diff`, `genpwd`, `fx`, `template`, `service/`, `setting/`, and `main.go`. New behavioral contracts in those packages are currently unverified — add tests when changing load-bearing logic there.
+- **Coverage reality**: ONLY `plugin/jv` has tests - 2 files, 20 funcs, white-box (`package plugin_jv`, accesses unexported fields). Zero tests in `pwd`, `tt`, `json2excel`, `translate`, `diff`, `genpwd`, `template`, `service/`, `setting/`, and `main.go`. New behavioral contracts in those packages are currently unverified - add tests when changing load-bearing logic there.
 - **Style**: flat tests, no `t.Run` subtests (except none currently). The only table-driven test is `TestEvalFilter` (`cases := []struct{expr,want string}{}`). Inline raw-string fixtures; no `testdata/`, no golden files, no build tags.
 - **CI gate**: ⚠️ `.github/workflows/release.yml` builds and publishes release assets but does **NOT** run `go test` or `go vet`. There is no test/lint gate before release. Run `go test ./...` and `go vet ./...` locally before tagging a release.
 

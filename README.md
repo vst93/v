@@ -188,6 +188,9 @@ $ v jv -c
 # Read from file
 $ v jv -file data.json
 
+# Read from URL
+$ v jv -url https://api.example.com/data
+
 # Pipe input
 $ cat data.json | v jv
 ```
@@ -231,10 +234,6 @@ $ v diff -left file.txt -clip
 $ v diff -left a.txt -right b.txt -inline
 ```
 
-### fx - File Explorer
-
-Quick file listing and exploration.
-
 ## Development
 
 ### Project Structure
@@ -254,7 +253,6 @@ v/
 │   ├── genpwd/          # Random password generator
 │   ├── jv/              # JSON viewer
 │   ├── diff/            # Side-by-side diff viewer
-│   └── fx/              # File explorer
 └── setting/
     └── ini.go           # Configuration management
 ```
