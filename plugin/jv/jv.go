@@ -67,31 +67,31 @@ func (j *Jv) Run(args []string) error {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "-f", "--format":
+		case "-f":
 			mode = "format"
-		case "-c", "--compress":
+		case "-c":
 			mode = "compress"
-		case "-e", "--escape":
+		case "-e":
 			mode = "escape"
-		case "-u", "--unescape":
+		case "-u":
 			mode = "unescape"
-		case "-i", "--interactive":
+		case "-i":
 			mode = "interactive"
-		case "-sort", "--sort":
+		case "-sort":
 			sortKeys = true
-		case "-raw", "--raw":
+		case "-raw":
 			raw = true
-		case "-file", "--file":
+		case "-file":
 			if i+1 < len(args) {
 				filePath = args[i+1]
 				i++
 			}
-		case "-url", "--url":
+		case "-url":
 			if i+1 < len(args) {
 				url = args[i+1]
 				i++
 			}
-		case "-pipe", "--pipe":
+		case "-pipe":
 			if i+1 < len(args) {
 				pipeData = args[i+1]
 				hasPipe = true

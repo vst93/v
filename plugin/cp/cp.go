@@ -54,13 +54,13 @@ func (c *Cp) Run(args []string) error {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "-trim", "--trim":
+		case "-trim":
 			trim = true
-		case "-triml", "--triml":
+		case "-triml":
 			trimLeft = true
-		case "-trimr", "--trimr":
+		case "-trimr":
 			trimRight = true
-		case "-pipe", "--pipe":
+		case "-pipe":
 			if i+1 < len(args) {
 				pipeData = args[i+1]
 				hasPipe = true

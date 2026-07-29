@@ -72,38 +72,38 @@ func (e *Enc) Run(args []string) error {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "-b64", "--base64":
+		case "-b64":
 			mode = "base64enc"
-		case "-b64d", "--base64d":
+		case "-b64d":
 			mode = "base64dec"
-		case "-b32", "--base32":
+		case "-b32":
 			mode = "base32enc"
-		case "-b32d", "--base32d":
+		case "-b32d":
 			mode = "base32dec"
-		case "-url", "--url":
+		case "-url":
 			mode = "urlenc"
-		case "-urld", "--urld":
+		case "-urld":
 			mode = "urldec"
-		case "-hex", "--hex":
+		case "-hex":
 			mode = "hexenc"
-		case "-hexd", "--hexd":
+		case "-hexd":
 			mode = "hexdec"
-		case "-html", "--html":
+		case "-html":
 			mode = "htmlesc"
-		case "-htmld", "--htmld":
+		case "-htmld":
 			mode = "htmlunesc"
-		case "-uni", "--unicode":
+		case "-uni":
 			mode = "unienc"
-		case "-unid", "--unicoded":
+		case "-unid":
 			mode = "unidec"
-		case "-file", "--file":
+		case "-file":
 			if i+1 < len(args) {
 				filePath = args[i+1]
 				i++
 			}
-		case "-c", "--copy":
+		case "-c":
 			copyCB = true
-		case "-pipe", "--pipe":
+		case "-pipe":
 			if i+1 < len(args) {
 				pipeData = args[i+1]
 				hasPipe = true

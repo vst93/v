@@ -87,17 +87,17 @@ func (g *Gcm) Run(args []string) error {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "-add", "--add":
+		case "-add":
 			stageAll = true
-		case "-p", "--pipe-mode":
+		case "-p":
 			usePipe = true
-		case "-c", "--copy":
+		case "-c":
 			toClip = true
-		case "-u", "--unstaged":
+		case "-u":
 			source = sourceUnstaged
-		case "-a", "--all":
+		case "-a":
 			source = sourceAll
-		case "-pipe", "--pipe":
+		case "-pipe":
 			if i+1 < len(args) {
 				pipeData = args[i+1]
 				hasPipe = true

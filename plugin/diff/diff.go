@@ -59,23 +59,23 @@ func (d *Diff) Run(args []string) error {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "-left", "--left", "-file1", "--file1":
+		case "-left", "-file1":
 			if i+1 < len(args) {
 				leftPath = args[i+1]
 				i++
 			}
-		case "-right", "--right", "-file2", "--file2":
+		case "-right", "-file2":
 			if i+1 < len(args) {
 				rightPath = args[i+1]
 				i++
 			}
-		case "-inline", "--inline":
+		case "-inline":
 			inline = true
-		case "-raw", "--raw":
+		case "-raw":
 			raw = true
-		case "-clip", "--clip":
+		case "-clip":
 			useClip = true
-		case "-pipe", "--pipe":
+		case "-pipe":
 			if i+1 < len(args) {
 				pipeData = args[i+1]
 				hasPipe = true

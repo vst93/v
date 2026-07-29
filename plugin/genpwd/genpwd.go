@@ -186,7 +186,7 @@ func (g *Genpwd) Run(args []string) error {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "-l", "--length":
+		case "-l":
 			if i+1 < len(args) {
 				n, err := strconv.Atoi(args[i+1])
 				if err != nil || n < 1 {
@@ -195,7 +195,7 @@ func (g *Genpwd) Run(args []string) error {
 				length = n
 				i++
 			}
-		case "-n", "--count":
+		case "-n":
 			if i+1 < len(args) {
 				n, err := strconv.Atoi(args[i+1])
 				if err != nil || n < 1 {
@@ -204,17 +204,17 @@ func (g *Genpwd) Run(args []string) error {
 				count = n
 				i++
 			}
-		case "-c", "--copy":
+		case "-c":
 			copyClip = true
-		case "-nl", "--no-lower":
+		case "-nl":
 			noLower = true
-		case "-nu", "--no-upper":
+		case "-nu":
 			noUpper = true
-		case "-nd", "--no-digit", "--no-digits":
+		case "-nd":
 			noDigit = true
-		case "-ns", "--no-special":
+		case "-ns":
 			noSpecial = true
-		case "-i", "--interactive":
+		case "-i":
 			forceInter = true
 		case "-h", "--help":
 			g.printHelp()
