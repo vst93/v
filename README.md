@@ -294,6 +294,10 @@ $ v enc -hex "Hello"
 $ v enc -html '<a href="x">test</a>'
 &lt;a href=&#34;x&#34;&gt;test&lt;/a&gt;
 
+# Unicode escape (supports emoji via surrogate pairs)
+$ v enc -uni "你好"
+\u4f60\u597d
+
 # Pipe input
 $ echo "Hello" | v enc -b64
 SGVsbG8K
@@ -316,6 +320,8 @@ $ v enc -b64 "secret" -c
 | `-hexd` | Hex decode |
 | `-html` | HTML escape |
 | `-htmld` | HTML unescape |
+| `-uni` | Unicode escape (non-ASCII to \uXXXX) |
+| `-unid` | Unicode unescape (\uXXXX to UTF-8) |
 | `-file` | Read from file path |
 | `-c` | Copy result to clipboard |
 | `-pipe` | Read from pipe/stdin (auto-detected) |

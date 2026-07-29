@@ -8,6 +8,7 @@ import (
 	"html"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/atotto/clipboard"
@@ -38,6 +39,8 @@ func (e *Enc) Init() error {
 		"-hexd":  "Hex decode",
 		"-html":  "HTML escape",
 		"-htmld": "HTML unescape",
+		"-uni":   "Unicode escape (non-ASCII to \\uXXXX)",
+		"-unid":  "Unicode unescape (\\uXXXX to UTF-8)",
 		"-file":  "Read from file path instead of clipboard/arg",
 		"-c":     "Copy result to clipboard",
 		"-pipe":  "Read from pipe/stdin (auto-detected)",
@@ -89,6 +92,10 @@ func (e *Enc) Run(args []string) error {
 			mode = "htmlesc"
 		case "-htmld", "--htmld":
 			mode = "htmlunesc"
+		case "-uni", "--unicode":
+			mode = "unienc"
+		case "-unid", "--unicoded":
+			mode = "unidec"
 		case "-file", "--file":
 			if i+1 < len(args) {
 				filePath = args[i+1]
@@ -196,6 +203,10 @@ func (e *Enc) transform(mode, input string) (string, error) {
 		return html.EscapeString(input), nil
 	case "htmlunesc":
 		return html.UnescapeString(input), nil
+	case "unienc":
+		return escapeUnicode(input), nil
+	case "unidec":
+		return unescapeUnicode(input), nil
 	default:
 		return "", fmt.Errorf("unknown mode: %s", mode)
 	}
@@ -217,6 +228,8 @@ Modes:
   -hexd     Hex decode
   -html     HTML escape
   -htmld    HTML unescape
+  -uni      Unicode escape (non-ASCII to \uXXXX)
+  -unid     Unicode unescape (\uXXXX to UTF-8)
 
 Input sources (priority: pipe > file > argument > clipboard):
   (text)     Pass text directly as argument
@@ -233,7 +246,9 @@ Examples:
   echo "Hello" | v enc -b64 -c
   v enc -b64d "SGVsbG8gV29ybGQ="
   v enc -url "hello world&foo=bar"
-  v enc -hexd "48656c6c6f"`)
+  v enc -hexd "48656c6c6f"
+  v enc -uni "你好"
+  v enc -unid "\u4f60\u597d"`)
 }
 
 func expandHome(path string) string {
@@ -244,4 +259,64 @@ func expandHome(path string) string {
 		}
 	}
 	return path
+}
+
+// escapeUnicode replaces all non-ASCII runes with \uXXXX escapes,
+// using surrogate pairs for code points above 0xFFFF.
+func escapeUnicode(input string) string {
+	var sb strings.Builder
+	for _, r := range input {
+		if r < 128 {
+			sb.WriteRune(r)
+		} else if r <= 0xFFFF {
+			sb.WriteString(fmt.Sprintf(`\u%04x`, r))
+		} else {
+			// surrogate pair
+			r -= 0x10000
+			high := 0xD800 + (r >> 10)
+			low := 0xDC00 + (r & 0x3FF)
+			sb.WriteString(fmt.Sprintf(`\u%04x\u%04x`, high, low))
+		}
+	}
+	return sb.String()
+}
+
+// unescapeUnicode converts \uXXXX sequences (including surrogate pairs)
+// back to UTF-8 characters.
+func unescapeUnicode(input string) string {
+	if !strings.Contains(input, `\u`) {
+		return input
+	}
+	var sb strings.Builder
+	i := 0
+	runes := []rune(input)
+	for i < len(runes) {
+		if runes[i] == '\\' && i+1 < len(runes) && runes[i+1] == 'u' {
+			if i+5 < len(runes) {
+				hex := string(runes[i+2 : i+6])
+				if n, err := strconv.ParseInt(hex, 16, 32); err == nil {
+					r := rune(n)
+					// Check for high surrogate
+					if r >= 0xD800 && r <= 0xDBFF && i+11 < len(runes) &&
+						runes[i+6] == '\\' && runes[i+7] == 'u' {
+						lowHex := string(runes[i+8 : i+12])
+						if low, err := strconv.ParseInt(lowHex, 16, 32); err == nil {
+							if low >= 0xDC00 && low <= 0xDFFF {
+								r = 0x10000 + (r-0xD800)<<10 + (rune(low) - 0xDC00)
+								sb.WriteRune(r)
+								i += 12
+								continue
+							}
+						}
+					}
+					sb.WriteRune(r)
+					i += 6
+					continue
+				}
+			}
+		}
+		sb.WriteRune(runes[i])
+		i++
+	}
+	return sb.String()
 }
