@@ -303,9 +303,12 @@ Input priority: pipe > argument > clipboard.
 
 ### enc - Encode/Decode Utility
 
-Encode and decode text using Base64, Base32, URL, Hex, or HTML encoding.
+Encode and decode text using Base64, Base32, URL, Hex, HTML, or Unicode encoding.
 
 ```bash
+# Interactive TUI (no arguments)
+$ v enc
+
 # Base64 encode
 $ v enc -b64 "Hello World"
 SGVsbG8gV29ybGQ=
@@ -360,6 +363,22 @@ $ v enc -b64 "secret" -c
 | `-h` | Show help |
 
 Input priority: pipe > file > argument > clipboard.
+
+**Interactive TUI** (`v enc` with no arguments):
+
+| Key | Action |
+|-----|--------|
+| `Tab` / `Shift+Tab` | Cycle focus: Codec -> Input -> Output |
+| `←` `→` | Switch codec type (when Codec focused) |
+| `1`-`9` | Quick select codec by number |
+| Type | Edit input text (when Input focused) |
+| `Ctrl-V` | Paste from clipboard |
+| `Ctrl-A` / `Ctrl-E` | Move cursor to start / end |
+| `Ctrl-U` / `Ctrl-K` | Delete before / after cursor |
+| `Ctrl-L` | Clear all |
+| `Ctrl-R` | Reverse: swap input/output, switch enc<->dec |
+| `Enter` | Copy output to clipboard (when Output focused) |
+| `Esc` | Quit |
 
 ### gcm - Generate Commit Message
 

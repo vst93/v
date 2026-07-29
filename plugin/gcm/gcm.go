@@ -117,6 +117,11 @@ func (g *Gcm) Run(args []string) error {
 	case usePipe:
 		return fmt.Errorf("no pipe input received. Use: git diff --cached | v gcm -p")
 	default:
+		// Check if we're in a git repository before running git commands
+		if err := checkGitRepo(); err != nil {
+			fmt.Print(notGitRepoMessage())
+			return nil
+		}
 		if stageAll {
 			if err := runGitAddAll(); err != nil {
 				return err
@@ -253,6 +258,19 @@ func gitPush() error {
 		return fmt.Errorf("git push failed: %w", err)
 	}
 	return nil
+}
+
+// checkGitRepo returns nil if the current directory is inside a git repository.
+func checkGitRepo() error {
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	cmd.Stderr = nil
+	cmd.Stdout = nil
+	return cmd.Run()
+}
+
+// notGitRepoMessage returns a friendly message when not in a git repository.
+func notGitRepoMessage() string {
+	return "📦 Not a git repository. Run `git init` or navigate to a git project first.\n"
 }
 
 // runGitDiff shells out to git for the requested change source.

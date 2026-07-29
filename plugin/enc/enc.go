@@ -120,6 +120,11 @@ func (e *Enc) Run(args []string) error {
 		}
 	}
 
+	if mode == "" && !hasPipe && filePath == "" && !hasInput {
+		// No args at all -> launch TUI
+		return runTUI()
+	}
+
 	if mode == "" {
 		e.printHelp()
 		return nil
@@ -166,6 +171,11 @@ func (e *Enc) Run(args []string) error {
 }
 
 func (e *Enc) transform(mode, input string) (string, error) {
+	return doTransform(mode, input)
+}
+
+// doTransform is the standalone transform function (also used by the TUI).
+func doTransform(mode, input string) (string, error) {
 	switch mode {
 	case "base64enc":
 		return base64.StdEncoding.EncodeToString([]byte(input)), nil
