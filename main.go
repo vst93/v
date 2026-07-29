@@ -29,6 +29,7 @@ func main() {
 	// Command aliases (short forms)
 	aliases := map[string]string{
 		"gp": "genpwd",
+		"gc": "gcm",
 	}
 	if real, ok := aliases[firstArg]; ok {
 		firstArg = real

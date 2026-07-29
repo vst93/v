@@ -269,6 +269,60 @@ $ v diff -left a.txt -right b.txt -inline
 | `Ctrl-D` | Compute diff |
 | `Esc` | Quit |
 
+### gcm - Generate Commit Message
+
+Generate a Conventional Commits message from your git changes using an
+OpenAI-compatible AI model.
+
+**Short command:** `gc` (alias for `gcm`)
+
+```bash
+# Generate from staged changes (git diff --cached)
+$ v gcm
+📦 Generating commit message (gpt-4o-mini)...
+
+feat(gcm): add AI commit message generator
+
+# Stage all changes then generate
+$ v gcm -add
+
+# Generate and copy to clipboard
+$ v gcm -c
+
+# Use unstaged changes (git diff)
+$ v gcm -u
+
+# Use all changes vs HEAD (git diff HEAD)
+$ v gcm -a
+
+# Read the diff from a pipe instead of running git
+$ git diff --cached | v gcm -p
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-add` | Stage all changes (`git add .`) before generating |
+| `-p` | Read diff from stdin/pipe instead of running git |
+| `-c` | Copy the generated message to clipboard |
+| `-u` | Use unstaged changes (`git diff`) |
+| `-a` | Use all changes vs HEAD (`git diff HEAD`) |
+| `-h` | Show help |
+
+**Configuration** — add a `[gcm]` section to `~/.v_tools/settings.ini`:
+
+```ini
+[gcm]
+api_key = sk-xxx
+base_url = https://api.openai.com/v1
+model = gpt-4o-mini
+```
+
+`base_url` and `model` are optional and default to the values above. Any
+OpenAI-compatible endpoint works. Diffs longer than 50000 characters are
+truncated before the API call to stay within the model's token limit.
+
 ## Development
 
 ### Project Structure
@@ -288,6 +342,7 @@ v/
 │   ├── genpwd/          # Random password generator
 │   ├── jv/              # JSON viewer
 │   ├── diff/            # Side-by-side diff viewer
+│   ├── gcm/             # AI commit message generator
 └── setting/
     └── ini.go           # Configuration management
 ```

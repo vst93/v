@@ -25,7 +25,7 @@ stdin/pipe ──► main.go ──► service.Plugin{}.List() ──► matched
 2. L17-20 `args := os.Args[1:]`; if empty, defaults to `["-h"]`.
 3. L21 `firstArg := args[0]` is the command name.
 4. L22-27 **Pipe detection**: `os.Stdin.Stat()`; if `ModeNamedPipe`, reads all stdin and **appends** `["-pipe", string(bytes)]` to the *end* of `args` (after the subcommand). Plugins scan `args` for `-pipe` by index.
-5. L29-35 **Aliases**: only `gp` → `genpwd`.
+5. L29-36 **Aliases**: `gp` → `genpwd`, `gc` → `gcm`.
 6. L37-41 `-h`/`-help`/`--help` → `fmt.Println(service.Help())`.
 7. L43-55 Iterates `service.Plugin{}.List()` (which calls `Init()` on every plugin), matches `plugin.GetCommand() == firstArg`, then `plugin.Run(args[1:])`. Unknown commands **silently do nothing** (no fallback). `defer plugin.Stop()` runs per match.
 
@@ -34,13 +34,14 @@ stdin/pipe ──► main.go ──► service.Plugin{}.List() ──► matched
 - `PluginInfo` struct L27-35; `Plugin` struct L36; `GetInfo` L38; `Info` L49.
 - `List()` L60 (value receiver) — constructs the slice, calls `Init()` on each at L71-73, returns. `Init()` is effectively the constructor.
 
-**Registered plugins** (`service/plugin.go` import block L3-12, `List()` body L61-74) - all 7 are registered:
+**Registered plugins** (`service/plugin.go` import block L3-12, `List()` body L61-75) - all 8 are registered:
 
 | Command | Plugin struct | Alias | Purpose |
 |---|---|---|---|
 | `v json2excel` | `Json2Excel` | — | JSON → .xlsx/CSV with dot-path key drill + flatten |
 | `v jv` | `Jv` | — | JSON viewer/formatter + interactive TUI tree (default mode) |
 | `v diff` | `Diff` | - | Side-by-side text diff (Myers) with inline word highlighting |
+| `v gcm` | `Gcm` | `gc` | AI commit message from git diff via OpenAI-compatible API |
 | `v genpwd` | `Genpwd` | `gp` | CSPRNG password generator with interactive TUI |
 | `v pwd` | `Pwd` | — | Print cwd + copy to clipboard |
 | `v tt` | `TT` | — | Unix timestamp ↔ date string conversion |
@@ -66,6 +67,7 @@ v/
 │   ├── genpwd/             # genpwd.go (crypto/rand + Fisher-Yates) + viewer.go (TUI form)
 │   ├── jv/                 # jv.go + viewer.go (~2162-line TUI) + lexer.go + filter.go + format.go + orderedmap.go + clipboard.go
 │   ├── diff/               # diff.go + myers.go (Myers from scratch) + viewer.go (dual tview.TextView)
+│   ├── gcm/                # gcm.go (git diff → OpenAI-compatible chat/completions) + gcm_test.go
 │   └── template/           # Scaffold; NOT registered
 ├── cmd/install.sh          # Bash installer: download latest release zip, SHA256-verify, install
 ├── .github/workflows/release.yml  # Release build matrix (linux/windows/darwin/android × amd64/arm64)
