@@ -346,7 +346,7 @@ feat(gcm): add AI commit message generator
 # Stage all changes then generate
 $ v gcm -add
 
-# Generate and copy to clipboard
+# Generate and copy to clipboard (skip menu)
 $ v gcm -c
 
 # Use unstaged changes (git diff)
@@ -365,7 +365,7 @@ $ git diff --cached | v gcm -p
 |--------|-------------|
 | `-add` | Stage all changes (`git add .`) before generating |
 | `-p` | Read diff from stdin/pipe instead of running git |
-| `-c` | Copy the generated message to clipboard |
+| `-c` | Copy to clipboard (skips interactive menu in non-pipe mode) |
 | `-u` | Use unstaged changes (`git diff`) |
 | `-a` | Use all changes vs HEAD (`git diff HEAD`) |
 | `-h` | Show help |
@@ -382,6 +382,19 @@ model = gpt-4o-mini
 `base_url` and `model` are optional and default to the values above. Any
 OpenAI-compatible endpoint works. Diffs longer than 50000 characters are
 truncated before the API call to stay within the model's token limit.
+
+**Interactive menu** (non-pipe mode only): after generating a commit message,
+choose an action:
+
+| Choice | Action |
+|--------|--------|
+| `1` or `Enter` | Copy to clipboard (default) |
+| `2` | Commit with the message |
+| `3` | Commit and push |
+| `4` | Do nothing |
+
+Pipe mode (`-p`) and `-c` flag skip the menu — they just print the message
+(or print + copy).
 
 ## Development
 

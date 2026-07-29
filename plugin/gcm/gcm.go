@@ -1,10 +1,12 @@
 package plugin_gcm
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -159,11 +161,96 @@ func (g *Gcm) Run(args []string) error {
 
 	fmt.Println(message)
 
+	// Pipe mode: print only (optional -c to copy), no interactive menu
+	if hasPipe {
+		if toClip {
+			if err := clipboard.WriteAll(message); err != nil {
+				return fmt.Errorf("failed to copy to clipboard: %w", err)
+			}
+			fmt.Println("\n✅ Copied to clipboard")
+		}
+		return nil
+	}
+
+	// Non-pipe mode: -c shortcut skips the menu, just copy
 	if toClip {
 		if err := clipboard.WriteAll(message); err != nil {
 			return fmt.Errorf("failed to copy to clipboard: %w", err)
 		}
 		fmt.Println("\n✅ Copied to clipboard")
+		return nil
+	}
+
+	// Interactive action menu
+	return g.actionMenu(message)
+}
+
+// actionMenu shows an interactive menu after generating a commit message.
+func (g *Gcm) actionMenu(message string) error {
+	fmt.Println("\n─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─")
+	fmt.Println("📦 What would you like to do?")
+	fmt.Println()
+	fmt.Println("  1) Copy to clipboard (default)")
+	fmt.Println("  2) Commit with this message")
+	fmt.Println("  3) Commit and push")
+	fmt.Println("  4) Do nothing")
+	fmt.Println()
+	fmt.Print("Choice [1-4]: ")
+
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+	choice := strings.TrimSpace(scanner.Text())
+
+	if choice == "" {
+		choice = "1"
+	}
+
+	switch choice {
+	case "1", "":
+		if err := clipboard.WriteAll(message); err != nil {
+			return fmt.Errorf("failed to copy to clipboard: %w", err)
+		}
+		fmt.Println("✅ Copied to clipboard")
+	case "2":
+		if err := gitCommit(message); err != nil {
+			return err
+		}
+		fmt.Println("✅ Committed")
+	case "3":
+		if err := gitCommit(message); err != nil {
+			return err
+		}
+		fmt.Println("✅ Committed")
+		if err := gitPush(); err != nil {
+			return err
+		}
+		fmt.Println("✅ Pushed")
+	case "4":
+		fmt.Println("👌 Done, no action taken")
+	default:
+		fmt.Println("👌 Unknown choice, message printed above")
+	}
+	return nil
+}
+
+// gitCommit runs git commit with the given message.
+func gitCommit(message string) error {
+	cmd := exec.Command("git", "commit", "-m", message)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git commit failed: %w", err)
+	}
+	return nil
+}
+
+// gitPush runs git push.
+func gitPush() error {
+	cmd := exec.Command("git", "push")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git push failed: %w", err)
 	}
 	return nil
 }
@@ -362,16 +449,20 @@ func (g *Gcm) printHelp() {
 	fmt.Println("  v gcm -add                     Stage all (git add .) then generate")
 	fmt.Println("  v gcm -u                       Generate from unstaged changes (git diff)")
 	fmt.Println("  v gcm -a                       Generate from all changes vs HEAD (git diff HEAD)")
-	fmt.Println("  v gcm -c                       Generate and copy to clipboard")
+	fmt.Println("  v gcm -c                       Generate and copy to clipboard (skip menu)")
 	fmt.Println("  git diff --cached | v gcm -p   Generate from piped diff")
 	fmt.Println()
 	fmt.Println("Options:")
 	fmt.Println("  -add   Stage all changes (git add .) before generating")
 	fmt.Println("  -p     Read diff from stdin/pipe instead of running git")
-	fmt.Println("  -c     Copy the generated message to clipboard")
+	fmt.Println("  -c     Copy to clipboard (skips interactive menu in non-pipe mode)")
 	fmt.Println("  -u     Use unstaged changes (git diff)")
 	fmt.Println("  -a     Use all changes vs HEAD (git diff HEAD)")
 	fmt.Println("  -h     Show this help")
+	fmt.Println()
+	fmt.Println("Interactive menu (non-pipe mode only):")
+	fmt.Println("  After generating, choose: 1) Copy  2) Commit  3) Commit+Push  4) Nothing")
+	fmt.Println("  Default (just Enter) = Copy to clipboard")
 	fmt.Println()
 	fmt.Println("Short command: gc (alias for gcm)")
 	fmt.Println()
