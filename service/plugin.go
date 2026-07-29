@@ -1,6 +1,7 @@
 package service
 
 import (
+	plugin_cp "v/plugin/cp"
 	plugin_diff "v/plugin/diff"
 	plugin_enc "v/plugin/enc"
 	plugin_gcm "v/plugin/gcm"
@@ -64,6 +65,7 @@ func (p Plugin) List() []PluginTemplate {
 		&(plugin_jv.Jv{}),
 		&(plugin_diff.Diff{}),
 		&(plugin_enc.Enc{}),
+		&(plugin_cp.Cp{}),
 		&(plugin_gcm.Gcm{}),
 		&(plugin_genpwd.Genpwd{}),
 		&(plugin_pwd.Pwd{}),

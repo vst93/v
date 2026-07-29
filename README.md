@@ -269,6 +269,38 @@ $ v diff -left a.txt -right b.txt -inline
 | `Ctrl-D` | Compute diff |
 | `Esc` | Quit |
 
+### cp - Copy to Clipboard
+
+Copy text to clipboard. Designed for pipe mode to chain with other commands.
+
+```bash
+# Copy piped stdin to clipboard
+$ echo "Hello World" | v cp
+
+# Copy argument directly
+$ v cp "some text"
+
+# Trim whitespace before copying
+$ printf '  \n  Hello  \n  ' | v cp -trim
+# copies "Hello"
+
+# Trim one side only
+$ echo "  hello  " | v cp -triml   # copies "hello  "
+$ echo "  hello  " | v cp -trimr   # copies "  hello"
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-trim` | Trim leading & trailing whitespace (spaces, tabs, newlines) |
+| `-triml` | Trim leading whitespace only |
+| `-trimr` | Trim trailing whitespace only |
+| `-pipe` | Read from pipe/stdin (auto-detected) |
+| `-h` | Show help |
+
+Input priority: pipe > argument > clipboard.
+
 ### enc - Encode/Decode Utility
 
 Encode and decode text using Base64, Base32, URL, Hex, or HTML encoding.
@@ -415,6 +447,7 @@ v/
 │   ├── genpwd/          # Random password generator
 │   ├── jv/              # JSON viewer
 │   ├── diff/            # Side-by-side diff viewer
+│   ├── cp/              # Copy to clipboard (pipe-friendly)
 │   ├── enc/             # Encode/Decode utility (base64, url, hex, html)
 │   ├── gcm/             # AI commit message generator
 └── setting/
