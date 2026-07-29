@@ -269,6 +269,60 @@ $ v diff -left a.txt -right b.txt -inline
 | `Ctrl-D` | Compute diff |
 | `Esc` | Quit |
 
+### enc - Encode/Decode Utility
+
+Encode and decode text using Base64, Base32, URL, Hex, or HTML encoding.
+
+```bash
+# Base64 encode
+$ v enc -b64 "Hello World"
+SGVsbG8gV29ybGQ=
+
+# Base64 decode
+$ v enc -b64d "SGVsbG8gV29ybGQ="
+Hello World
+
+# URL encode
+$ v enc -url "hello world&foo=bar"
+hello+world%26foo%3Dbar
+
+# Hex encode
+$ v enc -hex "Hello"
+48656c6c6f
+
+# HTML escape
+$ v enc -html '<a href="x">test</a>'
+&lt;a href=&#34;x&#34;&gt;test&lt;/a&gt;
+
+# Pipe input
+$ echo "Hello" | v enc -b64
+SGVsbG8K
+
+# Copy result to clipboard
+$ v enc -b64 "secret" -c
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-b64` | Base64 encode |
+| `-b64d` | Base64 decode |
+| `-b32` | Base32 encode |
+| `-b32d` | Base32 decode |
+| `-url` | URL encode (percent-encoding) |
+| `-urld` | URL decode |
+| `-hex` | Hex encode |
+| `-hexd` | Hex decode |
+| `-html` | HTML escape |
+| `-htmld` | HTML unescape |
+| `-file` | Read from file path |
+| `-c` | Copy result to clipboard |
+| `-pipe` | Read from pipe/stdin (auto-detected) |
+| `-h` | Show help |
+
+Input priority: pipe > file > argument > clipboard.
+
 ### gcm - Generate Commit Message
 
 Generate a Conventional Commits message from your git changes using an
@@ -342,6 +396,7 @@ v/
 │   ├── genpwd/          # Random password generator
 │   ├── jv/              # JSON viewer
 │   ├── diff/            # Side-by-side diff viewer
+│   ├── enc/             # Encode/Decode utility (base64, url, hex, html)
 │   ├── gcm/             # AI commit message generator
 └── setting/
     └── ini.go           # Configuration management
