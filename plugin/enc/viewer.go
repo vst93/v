@@ -349,19 +349,123 @@ func (ui *encTUI) reverseModeIdx() int {
 	return ui.modeIdx - 1
 }
 
-// refreshModeBar renders the mode selector with the active mode highlighted.
+// refreshModeBar renders the mode selector with a sliding window so that
+// the active mode is always visible even on narrow terminals.
 func (ui *encTUI) refreshModeBar() {
-	var sb strings.Builder
-	sb.WriteString(" ")
-	for i, m := range codecModes {
-		if i == ui.modeIdx {
-			sb.WriteString(fmt.Sprintf("[black:green:b] %s [-:-:-]", m.label))
-		} else {
-			sb.WriteString(fmt.Sprintf("[::d] %s [-:-:-]", m.label))
+	// Determine available inner width
+	_, _, width, _ := ui.modeBar.GetInnerRect()
+	if width <= 0 {
+		width = 80
+	}
+
+	// Each item renders as " Label " = label + 2 spaces. Separator is 1 space.
+	// Reserve 3 chars for "‹ " / " ›" indicators if needed.
+	itemW := func(idx int) int { return len(codecModes[idx].label) + 2 }
+
+	// Total width if all items shown
+	totalW := 0
+	for i := range codecModes {
+		totalW += itemW(i)
+	}
+	totalW += len(codecModes) - 1 // separators
+
+	// If everything fits, show all (no indicators)
+	if totalW <= width {
+		var sb strings.Builder
+		sb.WriteString(" ")
+		for i, m := range codecModes {
+			if i == ui.modeIdx {
+				sb.WriteString(fmt.Sprintf("[black:green:b] %s [-:-:-]", m.label))
+			} else {
+				sb.WriteString(fmt.Sprintf("[::d] %s [-:-:-]", m.label))
+			}
+			if i < len(codecModes)-1 {
+				sb.WriteString(" ")
+			}
 		}
-		if i < len(codecModes)-1 {
+		sb.WriteString(" ")
+		ui.modeBar.SetText(sb.String())
+		return
+	}
+
+	// Doesn't all fit — build a window around the current selection.
+	// Reserve space for indicators (2 chars each side: "‹ " and " ›")
+	availW := width - 4 // reserve for both indicators
+
+	// Start with just the center item
+	left := ui.modeIdx
+	right := ui.modeIdx
+	usedW := itemW(ui.modeIdx)
+
+	for {
+		expanded := false
+		// Try left
+		nl := (left - 1 + len(codecModes)) % len(codecModes)
+		if nl != right {
+			w := itemW(nl) + 1
+			if usedW+w <= availW {
+				left = nl
+				usedW += w
+				expanded = true
+			}
+		}
+		// Try right
+		nr := (right + 1) % len(codecModes)
+		if nr != left {
+			w := itemW(nr) + 1
+			if usedW+w <= availW {
+				right = nr
+				usedW += w
+				expanded = true
+			}
+		}
+		if !expanded {
+			break
+		}
+	}
+
+	// Check if left/right edges wrap (meaning all items on that side are shown)
+	// left edge: item before 'left' in circular order
+	// right edge: item after 'right' in circular order
+	// If window covers all items, no indicators needed
+	windowCount := 1
+	if right != left {
+		i := left
+		for i != right {
+			i = (i + 1) % len(codecModes)
+			windowCount++
+		}
+	}
+	showLeft := windowCount < len(codecModes)
+	showRight := windowCount < len(codecModes)
+	// If wrapping (left > right in linear terms), indicators may overlap
+	// But with limited width, wrapping means all fit, which we already handled above.
+
+	var sb strings.Builder
+	if showLeft {
+		sb.WriteString("[yellow]‹[-:-] ")
+	}
+	sb.WriteString(" ")
+	i := left
+	first := true
+	for {
+		if !first {
 			sb.WriteString(" ")
 		}
+		first = false
+		if i == ui.modeIdx {
+			sb.WriteString(fmt.Sprintf("[black:green:b] %s [-:-:-]", codecModes[i].label))
+		} else {
+			sb.WriteString(fmt.Sprintf("[::d] %s [-:-:-]", codecModes[i].label))
+		}
+		if i == right {
+			break
+		}
+		i = (i + 1) % len(codecModes)
+	}
+	sb.WriteString(" ")
+	if showRight {
+		sb.WriteString(" [yellow]›[-:-]")
 	}
 	ui.modeBar.SetText(sb.String())
 }
