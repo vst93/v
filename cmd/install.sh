@@ -1,362 +1,332 @@
 #!/bin/bash
+#
+# v installer
+#
+#   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vst93/v/refs/heads/main/cmd/install.sh)"
+#
+# Environment variables:
+#   INSTALL_DIR   Target directory (default: first writable of /usr/local/bin,
+#                 ~/.local/bin, ~/bin)
+#   VERSION       Release tag to install (default: latest)
+#   FORCE=1       Reinstall even when the installed version already matches
 
-set -e
+set -euo pipefail
 
-# Configuration
-REPO="https://github.com/vst93/v"
+REPO_URL="https://github.com/vst93/v"
+API_URL="https://api.github.com/repos/vst93/v"
 BINARY_NAME="v"
 TEMP_DIR=$(mktemp -d)
 
-# Get latest release version from GitHub API
-response=$(curl -s https://api.github.com/repos/vst93/$BINARY_NAME/releases/latest)
-VERSION=$(echo "$response" | grep 'tag_name' | cut -d'"' -f4)
+INSTALL_DIR="${INSTALL_DIR:-}"
+VERSION="${VERSION:-}"
+FORCE="${FORCE:-0}"
 
-# Validate VERSION is not empty
-if [ -z "$VERSION" ]; then
-    echo "Error: Failed to get latest release version from GitHub API"
-    exit 1
-fi
+# All progress output goes to stderr so that functions can use stdout to
+# return values through $(...) without the logs being captured too.
+log()  { echo "$*" >&2; }
+die()  { echo "Error: $*" >&2; exit 1; }
 
-# Determine installation directory
-determine_install_dir() {
-    local install_dir=""
-
-    # 1. Check if user specified install directory
-    if [ -n "$INSTALL_DIR" ]; then
-        install_dir="$INSTALL_DIR"
-        echo "Using user-specified install directory: $install_dir"
-        echo "$install_dir"
-        return 0
-    fi
-
-    # 2. Check /usr/local/bin
-    if [ -d "/usr/local/bin" ] && [ -w "/usr/local/bin" ]; then
-        echo "/usr/local/bin"
-        return 0
-    fi
-
-    # 3. Check ~/.local/bin
-    local user_local_bin="$HOME/.local/bin"
-    if [ -n "$HOME" ] && [ -d "$user_local_bin" ]; then
-        if [ -w "$user_local_bin" ]; then
-            echo "$user_local_bin"
-            return 0
-        fi
-    fi
-
-    # 4. Check ~/bin
-    local user_bin="$HOME/bin"
-    if [ -n "$HOME" ] && [ -d "$user_bin" ]; then
-        if [ -w "$user_bin" ]; then
-            echo "$user_bin"
-            return 0
-        fi
-    fi
-
-    # 5. Try to create ~/.local/bin if it doesn't exist
-    if [ -n "$HOME" ]; then
-        local new_dir="$HOME/.local/bin"
-        if mkdir -p "$new_dir" 2>/dev/null; then
-            echo "$new_dir"
-            return 0
-        fi
-    fi
-
-    # 6. Try to create ~/bin if it doesn't exist
-    if [ -n "$HOME" ]; then
-        local new_dir="$HOME/bin"
-        if mkdir -p "$new_dir" 2>/dev/null; then
-            echo "$new_dir"
-            return 0
-        fi
-    fi
-
-    echo "Error: Cannot determine installation directory"
-    exit 1
-}
-
-# Cleanup function
-cleanup() {
-    rm -rf "$TEMP_DIR"
-}
-
-# Error handling
+cleanup() { rm -rf "$TEMP_DIR"; }
 trap cleanup EXIT
-trap 'echo "Error occurred during installation"; exit 1' ERR
 
-# Detect platform and architecture
+# ---------------------------------------------------------------------------
+# Download helpers
+# ---------------------------------------------------------------------------
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+fetch_stdout() {
+    local url="$1"
+    if have curl; then
+        curl -fsSL "$url"
+    elif have wget; then
+        wget -qO- "$url"
+    else
+        die "curl or wget is required"
+    fi
+}
+
+download_file() {
+    local url="$1" output_file="$2"
+
+    if have curl; then
+        curl -fsSL -o "$output_file" "$url"
+    elif have wget; then
+        wget -qO "$output_file" "$url"
+    else
+        die "curl or wget is required for downloading"
+    fi
+
+    if [ ! -s "$output_file" ]; then
+        die "download failed or file is empty: $url"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Platform detection
+# ---------------------------------------------------------------------------
+
+# uname -o is not portable (older macOS BSD uname rejects it outright), so the
+# primary switch is on uname -s.
 detect_platform() {
-    OS=""
-    ARCH=""
+    local kernel
+    kernel="$(uname -s)"
 
-    # Detect OS
-    case "$(uname -o)" in
+    case "$kernel" in
         Darwin)
             OS="darwin"
             ;;
-        GNU/Linux)
-            OS="linux"
+        Linux)
+            # Termux on Android reports Linux; $PREFIX is the reliable tell.
+            if [ -n "${PREFIX:-}" ] && [ -d "${PREFIX}/bin" ]; then
+                OS="android"
+            elif [ "$(uname -o 2>/dev/null || echo)" = "Android" ]; then
+                OS="android"
+            else
+                OS="linux"
+            fi
             ;;
-        Android)
-            OS="android"
+        MINGW*|MSYS*|CYGWIN*)
+            OS="windows"
             ;;
         *)
-            echo "Unsupported OS: $(uname -o)"
-            exit 1
+            die "unsupported OS: $kernel"
             ;;
     esac
 
-    # Detect CPU architecture
     case "$(uname -m)" in
-        x86_64|amd64)
-            ARCH="amd64"
-            ;;
-        arm64|aarch64)
-            ARCH="arm64"
-            ;;
-        *)
-            echo "Unsupported CPU architecture: $(uname -m)"
-            exit 1
-            ;;
+        x86_64|amd64)  ARCH="amd64" ;;
+        arm64|aarch64) ARCH="arm64" ;;
+        *) die "unsupported CPU architecture: $(uname -m)" ;;
     esac
 
-    echo "Detected platform: $OS-$ARCH"
+    log "Detected platform: $OS-$ARCH"
 }
 
-# Build download URL
+# The release matrix is linux/darwin/android x amd64/arm64, plus windows/amd64.
 get_download_info() {
-    local os="$1"
-    local arch="$2"
+    local os="$1" arch="$2"
 
     case "$os-$arch" in
-        darwin-arm64)
-            FILENAME="v-darwin-arm64.zip"
-            ;;
-        darwin-amd64)
-            FILENAME="v-darwin-amd64.zip"
-            ;;
-        linux-arm64)
-            FILENAME="v-linux-arm64.zip"
-            ;;
-        linux-amd64)
-            FILENAME="v-linux-amd64.zip"
-            ;;
-        android-arm64)
-            FILENAME="v-android-arm64.zip"
-            ;;
-        android-amd64)
-            FILENAME="v-android-amd64.zip"
+        darwin-arm64|darwin-amd64|linux-arm64|linux-amd64|android-arm64|android-amd64|windows-amd64)
+            FILENAME="${BINARY_NAME}-${os}-${arch}.zip"
             ;;
         *)
-            echo "No package available for $os-$arch"
-            exit 1
+            die "no package available for $os-$arch"
             ;;
     esac
 
-    DOWNLOAD_URL="${REPO}/releases/download/${VERSION}/${FILENAME}"
-}
-
-# Download file
-download_file() {
-    local url="$1"
-    local output_file="$2"
-
-    if command -v curl &> /dev/null; then
-        curl -L -o "$output_file" "$url"
-    elif command -v wget &> /dev/null; then
-        wget -O "$output_file" "$url"
-    else
-        echo "Error: curl or wget is required for downloading"
-        exit 1
+    BINARY_FILE="$BINARY_NAME"
+    if [ "$os" = "windows" ]; then
+        BINARY_FILE="${BINARY_NAME}.exe"
     fi
 
-    # Check download success
-    if [ ! -f "$output_file" ] || [ ! -s "$output_file" ]; then
-        echo "Error: Download failed or file is empty"
-        exit 1
-    fi
+    DOWNLOAD_URL="${REPO_URL}/releases/download/${VERSION}/${FILENAME}"
 }
 
-# Check if unzip is available
-check_unzip() {
-    if ! command -v unzip &> /dev/null; then
-        echo "Error: unzip is required to extract the package"
-        echo "Please install unzip first:"
-        echo "  - Debian/Ubuntu: sudo apt install unzip"
-        echo "  - macOS: brew install unzip"
-        echo "  - Termux: pkg install unzip"
-        exit 1
-    fi
+# ---------------------------------------------------------------------------
+# Version resolution
+# ---------------------------------------------------------------------------
+
+resolve_latest_version() {
+    local response tag
+    response="$(fetch_stdout "${API_URL}/releases/latest")" \
+        || die "failed to reach the GitHub API (rate limited? try VERSION=<tag>)"
+    tag="$(echo "$response" | grep '"tag_name"' | head -1 | cut -d'"' -f4)"
+    [ -n "$tag" ] && echo "$tag"
 }
 
-# Get SHA256 hash
-get_sha256_hash() {
-    local sha256_url="$1"
-    local temp_sha_file="$TEMP_DIR/$(basename "$sha256_url")"
-
-    download_file "$sha256_url" "$temp_sha_file"
-
-    # Extract hash from SHA256 file
-    if grep -q " " "$temp_sha_file"; then
-        cut -d ' ' -f 1 "$temp_sha_file"
-    else
-        cat "$temp_sha_file"
-    fi
+installed_version() {
+    have "$BINARY_NAME" || return 0
+    "$BINARY_NAME" -version 2>/dev/null | head -1 | tr -d '[:space:]' || true
 }
 
-# Verify SHA256
-verify_sha256() {
-    local file="$1"
-    local expected_sha="$2"
+# ---------------------------------------------------------------------------
+# Install directory
+# ---------------------------------------------------------------------------
 
-    if ! command -v shasum &> /dev/null && ! command -v sha256sum &> /dev/null; then
-        echo "Warning: shasum or sha256sum not found, skipping verification"
+determine_install_dir() {
+    if [ -n "$INSTALL_DIR" ]; then
+        log "Using user-specified install directory: $INSTALL_DIR"
+        echo "$INSTALL_DIR"
         return 0
     fi
 
-    local actual_sha=""
-    if command -v shasum &> /dev/null; then
-        actual_sha=$(shasum -a 256 "$file" | cut -d ' ' -f1)
-    elif command -v sha256sum &> /dev/null; then
-        actual_sha=$(sha256sum "$file" | cut -d ' ' -f1)
-    fi
+    local candidate
+    for candidate in /usr/local/bin "$HOME/.local/bin" "$HOME/bin"; do
+        if [ -d "$candidate" ] && [ -w "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
 
-    if [ "$actual_sha" != "$expected_sha" ]; then
-        echo "SHA256 verification failed!"
-        echo "Expected: $expected_sha"
-        echo "Actual:   $actual_sha"
-        return 1
-    fi
+    # Nothing writable exists yet: create a user-owned directory.
+    for candidate in "$HOME/.local/bin" "$HOME/bin"; do
+        if mkdir -p "$candidate" 2>/dev/null; then
+            echo "$candidate"
+            return 0
+        fi
+    done
 
-    echo "SHA256 verification passed"
-    return 0
+    # Fall back to /usr/local/bin and let the install step escalate.
+    echo "/usr/local/bin"
 }
 
-# Ensure directory exists and return whether sudo is needed
-ensure_dir_exists() {
+# Prints "sudo" when writing to dir needs elevation, empty otherwise.
+sudo_prefix_for() {
     local dir="$1"
-    local need_sudo=0
 
     if [ ! -d "$dir" ]; then
-        echo "Creating directory: $dir"
         if mkdir -p "$dir" 2>/dev/null; then
-            echo "Directory created successfully"
-            need_sudo=0
-        else
-            echo "Need sudo to create directory"
-            if sudo mkdir -p "$dir"; then
-                need_sudo=1
-            else
-                echo "Error: Cannot create directory: $dir"
-                exit 1
-            fi
+            echo ""
+            return 0
         fi
-    elif [ ! -w "$dir" ]; then
-        echo "Directory $dir exists but is not writable"
-        need_sudo=1
-    else
-        need_sudo=0
+        have sudo || die "cannot create $dir and sudo is unavailable"
+        log "Creating $dir (needs sudo)"
+        sudo mkdir -p "$dir" || die "cannot create directory: $dir"
+        echo "sudo"
+        return 0
     fi
 
-    return $need_sudo
+    if [ -w "$dir" ]; then
+        echo ""
+    else
+        have sudo || die "$dir is not writable and sudo is unavailable"
+        echo "sudo"
+    fi
 }
 
-# Install binary
-install_binary() {
-    local zip_file="$1"
-    local install_dir="$2"
+# ---------------------------------------------------------------------------
+# SHA256
+# ---------------------------------------------------------------------------
 
-    echo "Extracting files..."
-    unzip -q "$zip_file" -d "$TEMP_DIR"
+sha256_of() {
+    local file="$1"
+    if have shasum; then
+        shasum -a 256 "$file" | cut -d ' ' -f1
+    elif have sha256sum; then
+        sha256sum "$file" | cut -d ' ' -f1
+    fi
+}
 
-    local binary_path="$TEMP_DIR/$BINARY_NAME"
+verify_sha256() {
+    local file="$1" sha256_url="$2"
 
-    if [ ! -f "$binary_path" ]; then
-        echo "Error: Cannot find $BINARY_NAME in archive"
-        exit 1
+    if ! have shasum && ! have sha256sum; then
+        log "Warning: shasum/sha256sum not found, skipping verification"
+        return 0
     fi
 
-    echo "Installing to $install_dir"
+    local sha_file="$TEMP_DIR/expected.sha256"
+    if ! download_file "$sha256_url" "$sha_file" 2>/dev/null; then
+        log "Warning: cannot fetch SHA256 checksum, skipping verification"
+        return 0
+    fi
+
+    local expected actual
+    expected="$(tr -d '[:space:]' < "$sha_file" | cut -d ' ' -f1)"
+    actual="$(sha256_of "$file")"
+
+    if [ "$actual" != "$expected" ]; then
+        log "Expected: $expected"
+        log "Actual:   $actual"
+        die "SHA256 verification failed, aborting installation"
+    fi
+    log "SHA256 verification passed"
+}
+
+# ---------------------------------------------------------------------------
+# Install
+# ---------------------------------------------------------------------------
+
+install_binary() {
+    local zip_file="$1" install_dir="$2"
+
+    have unzip || die "unzip is required (Debian/Ubuntu: sudo apt install unzip, macOS: brew install unzip, Termux: pkg install unzip)"
+
+    log "Extracting..."
+    unzip -q -o "$zip_file" -d "$TEMP_DIR"
+
+    local binary_path="$TEMP_DIR/$BINARY_FILE"
+    [ -f "$binary_path" ] || die "cannot find $BINARY_FILE in the archive"
     chmod +x "$binary_path"
 
-    if ensure_dir_exists "$install_dir"; then
-        mv "$binary_path" "$install_dir/"
-        echo "Binary moved successfully"
+    local sudo_cmd
+    sudo_cmd="$(sudo_prefix_for "$install_dir")"
+
+    log "Installing to $install_dir"
+    $sudo_cmd mv "$binary_path" "$install_dir/$BINARY_FILE"
+}
+
+suggest_path() {
+    local install_dir="$1" shell_rc=""
+
+    # Pick the rc file for the shell actually in use, not whichever file
+    # happens to exist first.
+    case "$(basename "${SHELL:-}")" in
+        zsh)  shell_rc="$HOME/.zshrc" ;;
+        bash) shell_rc="$HOME/.bashrc" ;;
+        fish) shell_rc="$HOME/.config/fish/config.fish" ;;
+        *)    shell_rc="$HOME/.profile" ;;
+    esac
+
+    log ""
+    log "Note: $install_dir is not in your PATH."
+    if [ "$(basename "${SHELL:-}")" = "fish" ]; then
+        log "  fish_add_path $install_dir"
     else
-        echo "Need sudo to write to $install_dir"
-        sudo mv "$binary_path" "$install_dir/"
-        echo "Binary moved successfully (using sudo)"
-    fi
-
-    # Verify installation
-    if command -v "$BINARY_NAME" &> /dev/null; then
-        echo "Installation successful!"
-        echo "$BINARY_NAME version: $($BINARY_NAME --version 2>/dev/null || echo 'installed')"
-    else
-        echo "Note: $BINARY_NAME may not be in your PATH"
-        echo "Installed at: $install_dir"
-        echo "Please ensure $install_dir is in your PATH environment variable"
-
-        # Suggest adding to PATH
-        local shell_rc=""
-        if [ -f "$HOME/.bashrc" ]; then
-            shell_rc="$HOME/.bashrc"
-        elif [ -f "$HOME/.zshrc" ]; then
-            shell_rc="$HOME/.zshrc"
-        elif [ -f "$HOME/.profile" ]; then
-            shell_rc="$HOME/.profile"
-        fi
-
-        if [ -n "$shell_rc" ]; then
-            echo ""
-            echo "To add to PATH, run:"
-            echo "  echo 'export PATH=\"$install_dir:\$PATH\"' >> $shell_rc"
-            echo "  source $shell_rc"
-        fi
+        log "  echo 'export PATH=\"$install_dir:\$PATH\"' >> $shell_rc"
+        log "  source $shell_rc"
     fi
 }
 
-# Main installation flow
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
 main() {
-    echo "Installing $BINARY_NAME $VERSION"
+    if [ -z "$VERSION" ]; then
+        log "Resolving latest release..."
+        VERSION="$(resolve_latest_version)"
+        [ -n "$VERSION" ] || die "failed to get the latest release version from the GitHub API"
+    fi
 
-    # Check for unzip
-    check_unzip
+    local current
+    current="$(installed_version)"
 
-    # Determine install directory
-    INSTALL_DIR=$(determine_install_dir)
-    echo "Installation directory: $INSTALL_DIR"
+    if [ -n "$current" ]; then
+        # Tags may or may not carry a leading "v"; the binary never reports one.
+        if [ "$current" = "${VERSION#v}" ] && [ "$FORCE" != "1" ]; then
+            log "$BINARY_NAME $current is already the latest version, nothing to do."
+            log "(Reinstall anyway with: FORCE=1)"
+            return 0
+        fi
+        log "Upgrading $BINARY_NAME $current -> ${VERSION#v}"
+    else
+        log "Installing $BINARY_NAME ${VERSION#v}"
+    fi
 
-    # Detect platform
     detect_platform
-
-    # Get download info
     get_download_info "$OS" "$ARCH"
 
-    echo "Download URL: $DOWNLOAD_URL"
+    INSTALL_DIR="$(determine_install_dir)"
+    log "Installation directory: $INSTALL_DIR"
+    log "Download URL: $DOWNLOAD_URL"
 
-    # Download file
     local zip_file="$TEMP_DIR/$FILENAME"
     download_file "$DOWNLOAD_URL" "$zip_file"
+    verify_sha256 "$zip_file" "${DOWNLOAD_URL}.sha256"
 
-    # Get and verify SHA256
-    local sha256_url="${DOWNLOAD_URL}.sha256"
-    echo "Fetching SHA256 checksum: $sha256_url"
-
-    local expected_sha=""
-    if expected_sha=$(get_sha256_hash "$sha256_url"); then
-        echo "Verifying file integrity..."
-        if ! verify_sha256 "$zip_file" "$expected_sha"; then
-            echo "Error: SHA256 verification failed, aborting installation"
-            exit 1
-        fi
-    else
-        echo "Warning: Cannot fetch SHA256 checksum, skipping verification"
-    fi
-
-    # Install
     install_binary "$zip_file" "$INSTALL_DIR"
+
+    log ""
+    if have "$BINARY_NAME"; then
+        log "✅ Installed $BINARY_NAME $("$BINARY_NAME" -version 2>/dev/null || echo "${VERSION#v}")"
+        log "Get started with: $BINARY_NAME -h"
+    else
+        log "✅ Installed to $INSTALL_DIR/$BINARY_FILE"
+        suggest_path "$INSTALL_DIR"
+    fi
 }
 
-# Run main function
 main "$@"

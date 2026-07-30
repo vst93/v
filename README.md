@@ -29,9 +29,31 @@ brew uninstall v
 ```bash
 git clone https://github.com/vst93/v.git
 cd v
-go build -o v main.go
+make build          # or: go build -o v .
 ./v -h
+./v -version        # "dev" for local builds, the release tag for published ones
 ```
+
+## Flag Conventions
+
+The same flag means the same thing in every plugin:
+
+| Flag | Meaning |
+|------|---------|
+| `-pipe` | Read from pipe/stdin (auto-detected, you rarely type it) |
+| `-file <path>` | Read input from a file |
+| `-clip` | **Read** the clipboard as input |
+| `-url <url>` | Read input from a URL |
+| `-out <path>` | Write the result to a file |
+| `-copy` | **Write** the result to the clipboard |
+| `-tui` | Interactive TUI mode |
+| `-raw` | Plain text output, no colors |
+| `-h` | Show help |
+
+Input priority: `-pipe` > `-file` > `-url` > positional argument > clipboard.
+
+Two documented exceptions: `jv` keeps its short mode letters (`-f` `-c` `-e`
+`-u` `-i`), and `diff` uses `-left`/`-right` because it takes two inputs.
 
 ## Available Commands
 
@@ -74,30 +96,33 @@ Convert JSON data to Excel (.xlsx) files with support for nested objects and key
 
 ```bash
 # Convert JSON file to Excel
-$ v json2excel -i 'data/input.json' -k 'data.list'
+$ v json2excel -file 'data/input.json' -k 'data.list'
 
 # Convert JSON string directly
-$ v json2excel -c '[{"name":"张三","age":25},{"name":"李四","age":30}]'
+$ v json2excel '[{"name":"张三","age":25},{"name":"李四","age":30}]'
 
 # Use pipe input
 $ curl -s 'https://api.example.com/data' | v json2excel -k 'items'
 
 # Specify output path
-$ v json2excel -i 'data.json' -o '/custom/path/output.xlsx'
+$ v json2excel -file 'data.json' -out '/custom/path/output.xlsx'
 
 # Keep nested JSON as strings (don't expand columns)
-$ v json2excel -i 'data.json' -unexpand
+$ v json2excel -file 'data.json' -unexpand
 ```
 
 **json2excel options:**
 
 | Option | Description |
 |--------|-------------|
-| `-i` | Input file path |
-| `-c` | JSON content string (overrides `-i`) |
-| `-o` | Output file path (defaults to ~/Downloads) |
+| `-file <path>` | Input JSON file path |
+| `-out <path>` | Output file path (defaults to ~/Downloads) |
 | `-k` | Drill down key, use dot separator (e.g., `-k data.list.items`) |
 | `-unexpand` | Don't expand nested JSON objects to multiple columns |
+| `-pipe` | Read JSON from stdin/pipe (auto-detected) |
+| `-h` | Show help |
+
+Inline JSON is passed as a positional argument. Input priority: pipe > `-file` > argument.
 
 ### tr - Text Translator
 
@@ -138,7 +163,7 @@ $ v gp -l 20
 $ v gp -l 12 -n 5
 
 # Generate and copy to clipboard
-$ v gp -l 16 -c
+$ v gp -l 16 -copy
 
 # No special characters
 $ v gp -l 16 -ns
@@ -162,12 +187,13 @@ $ v gp -l 16 -ns
 |--------|-------------|
 | `-l N` | Password length (default 16) |
 | `-n N` | Number of passwords (non-interactive, default 1) |
-| `-c` | Copy to clipboard (non-interactive) |
 | `-nl` | Exclude lowercase letters |
 | `-nu` | Exclude uppercase letters |
 | `-nd` | Exclude digits |
 | `-ns` | Exclude special characters |
-| `-i` | Force interactive TUI mode |
+| `-copy` | Copy to clipboard (non-interactive) |
+| `-tui` | Force interactive TUI mode |
+| `-h` | Show help |
 
 ### jv - JSON Viewer
 
@@ -191,9 +217,25 @@ $ v jv -file data.json
 # Read from URL
 $ v jv -url https://api.example.com/data
 
+# Format a file and copy the result
+$ v jv -f -file data.json -copy
+
+# Format a file and write the result somewhere else
+$ v jv -f -file data.json -out pretty.json
+
 # Pipe input
 $ cat data.json | v jv
 ```
+
+**Modes:** `-f` format · `-c` compress · `-e` escape to `\uXXXX` · `-u` unescape ·
+`-tui` (or `-i`) interactive viewer, which is the default.
+
+**Options:** `-sort` sort keys · `-raw` no colors · `-file <path>` · `-url <url>` ·
+`-clip` · `-out <path>` · `-copy` · `-h`.
+
+`jv` keeps its short mode letters for historical reasons — note that here `-c`
+means *compress*, not *copy*. Use `-copy` to copy. Writing to `-out` or `-copy`
+always produces plain text, never ANSI colors.
 
 Non-JSON input opens as plain editable text without formatting. Editing the text back
 into valid JSON automatically re-enables folding, path lookup and minified copy.
@@ -243,6 +285,18 @@ $ v diff
 # Inline unified diff output (no TUI)
 $ v diff -left a.txt -right b.txt -inline
 ```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-left <path>` | Left file path |
+| `-right <path>` | Right file path |
+| `-clip` | Read clipboard as a source |
+| `-pipe` | Read from stdin/pipe (auto-detected, used as left side) |
+| `-inline` | Output unified diff to stdout (no TUI) |
+| `-raw` | Plain text output (with `-inline`, no colors) |
+| `-h` | Show help |
 
 **Diff viewer keys:**
 
@@ -301,113 +355,127 @@ $ echo "  hello  " | v cp -trimr   # copies "  hello"
 
 Input priority: pipe > argument > clipboard.
 
-### enc - Encode/Decode Utility
+### codec - Encode/Decode Utility
 
 Encode and decode text using Base64, Base32, URL, Hex, HTML, or Unicode encoding.
 
+**Short command:** `cc` (`v enc` also still works — `codec` is the former `enc`)
+
 ```bash
 # Interactive TUI (no arguments)
-$ v enc
+$ v codec
 
 # Base64 encode
-$ v enc -b64 "Hello World"
+$ v codec -b64 "Hello World"
 SGVsbG8gV29ybGQ=
 
 # Base64 decode
-$ v enc -b64d "SGVsbG8gV29ybGQ="
+$ v cc -b64d "SGVsbG8gV29ybGQ="
 Hello World
 
 # URL encode
-$ v enc -url "hello world&foo=bar"
+$ v codec -url "hello world&foo=bar"
 hello+world%26foo%3Dbar
 
 # Hex encode
-$ v enc -hex "Hello"
+$ v codec -hex "Hello"
 48656c6c6f
 
 # HTML escape
-$ v enc -html '<a href="x">test</a>'
+$ v codec -html '<a href="x">test</a>'
 &lt;a href=&#34;x&#34;&gt;test&lt;/a&gt;
 
 # Unicode escape (supports emoji via surrogate pairs)
-$ v enc -uni "你好"
+$ v codec -uni "你好"
 \u4f60\u597d
 
 # Pipe input
-$ echo "Hello" | v enc -b64
+$ echo "Hello" | v codec -b64
 SGVsbG8K
 
-# Copy result to clipboard
-$ v enc -b64 "secret" -c
+# Copy result to clipboard / write it to a file
+$ v codec -b64 "secret" -copy
+$ v codec -b64 "secret" -out secret.txt
 ```
+
+**Modes:**
+
+| Option | Description | Option | Description |
+|--------|-------------|--------|-------------|
+| `-b64` | Base64 encode | `-b64d` | Base64 decode |
+| `-b32` | Base32 encode | `-b32d` | Base32 decode |
+| `-url` | URL encode (percent-encoding) | `-urld` | URL decode |
+| `-hex` | Hex encode | `-hexd` | Hex decode |
+| `-html` | HTML escape | `-htmld` | HTML unescape |
+| `-uni` | Unicode escape (non-ASCII to `\uXXXX`) | `-unid` | Unicode unescape |
 
 **Options:**
 
 | Option | Description |
 |--------|-------------|
-| `-b64` | Base64 encode |
-| `-b64d` | Base64 decode |
-| `-b32` | Base32 encode |
-| `-b32d` | Base32 decode |
-| `-url` | URL encode (percent-encoding) |
-| `-urld` | URL decode |
-| `-hex` | Hex encode |
-| `-hexd` | Hex decode |
-| `-html` | HTML escape |
-| `-htmld` | HTML unescape |
-| `-uni` | Unicode escape (non-ASCII to \uXXXX) |
-| `-unid` | Unicode unescape (\uXXXX to UTF-8) |
-| `-file` | Read from file path |
-| `-c` | Copy result to clipboard |
+| `-file <path>` | Read from file path |
+| `-clip` | Read from clipboard |
 | `-pipe` | Read from pipe/stdin (auto-detected) |
+| `-out <path>` | Write the result to a file |
+| `-copy` | Copy result to clipboard |
+| `-tui` | Interactive TUI (also the default with no mode) |
 | `-h` | Show help |
 
 Input priority: pipe > file > argument > clipboard.
 
-**Interactive TUI** (`v enc` with no arguments):
+**Interactive TUI** (`v codec` with no arguments) — fully mouse and touch driven:
 
-| Key | Action |
-|-----|--------|
-| `Tab` / `Shift+Tab` | Cycle focus: Codec -> Input -> Output |
-| `←` `→` | Switch codec type (when Codec focused) |
-| `1`-`9` | Quick select codec by number |
-| Type | Edit input text (when Input focused) |
-| `Ctrl-V` | Paste from clipboard |
-| `Ctrl-A` / `Ctrl-E` | Move cursor to start / end |
-| `Ctrl-U` / `Ctrl-K` | Delete before / after cursor |
-| `Ctrl-L` | Clear all |
-| `Ctrl-R` | Reverse: swap input/output, switch enc<->dec |
-| `Enter` | Copy output to clipboard (when Output focused) |
+| Key / Mouse | Action |
+|-------------|--------|
+| click / tap | Select a codec or mode, place the cursor, press a button |
+| drag | Select text in the input area |
+| wheel | Scroll input or output |
+| `Tab` / `Shift+Tab` | Cycle focus: Input → Codec → Mode → Output → buttons |
+| `↑` `↓` | Change selection (when a list is focused) |
+| `1`-`6` | Quick-select codec (when the Codec list is focused) |
+| `e` / `d` | Encode / decode (when the Mode list is focused) |
+| `Ctrl-C` / `Ctrl-X` / `Ctrl-V` | Copy / cut / paste in the input area (system clipboard) |
+| `Ctrl-Z` / `Ctrl-Y` | Undo / redo in the input area |
+| `y` / `Ctrl-Y` | Copy the output to clipboard |
+| `Ctrl-R` | Swap: feed the output back in and flip encode↔decode |
+| `Ctrl-L` | Clear the input |
 | `Esc` | Quit |
 
-### gcm - Generate Commit Message
+Conversion is live — the output updates as you type. Decode errors appear in the
+output box instead of clearing it silently. Below 64 columns the Codec/Mode
+column moves above the editor so nothing gets clipped.
+
+### gencm - Generate Commit Message
 
 Generate a Conventional Commits message from your git changes using an
 OpenAI-compatible AI model.
 
-**Short command:** `gc` (alias for `gcm`)
+**Short command:** `gc` (alias for `gencm`)
 
 ```bash
 # Generate from staged changes (git diff --cached)
-$ v gcm
+$ v gencm
 📦 Generating commit message (gpt-4o-mini)...
 
 feat(gcm): add AI commit message generator
 
 # Stage all changes then generate
-$ v gcm -add
+$ v gencm -add
 
 # Generate and copy to clipboard (skip menu)
-$ v gcm -c
+$ v gencm -copy
 
 # Use unstaged changes (git diff)
-$ v gcm -u
+$ v gencm -u
 
 # Use all changes vs HEAD (git diff HEAD)
-$ v gcm -a
+$ v gencm -a
+
+# Generate for a project in another directory
+$ v gencm -C ~/projects/myapp
 
 # Read the diff from a pipe instead of running git
-$ git diff --cached | v gcm -p
+$ git diff --cached | v gencm
 ```
 
 **Options:**
@@ -415,10 +483,12 @@ $ git diff --cached | v gcm -p
 | Option | Description |
 |--------|-------------|
 | `-add` | Stage all changes (`git add .`) before generating |
-| `-p` | Read diff from stdin/pipe instead of running git |
-| `-c` | Copy to clipboard (skips interactive menu in non-pipe mode) |
 | `-u` | Use unstaged changes (`git diff`) |
 | `-a` | Use all changes vs HEAD (`git diff HEAD`) |
+| `-C <path>` | Run as if git was started in `<path>` (default: current directory) |
+| `-lang` | Commit message language: `en`, `zh`, or custom text (default: `en`) |
+| `-pipe` | Read diff from stdin/pipe instead of running git (auto-detected) |
+| `-copy` | Copy to clipboard (skips interactive menu in non-pipe mode) |
 | `-h` | Show help |
 
 **Configuration** — add a `[gcm]` section to `~/.v_tools/settings.ini`:
@@ -428,11 +498,32 @@ $ git diff --cached | v gcm -p
 api_key = sk-xxx
 base_url = https://api.openai.com/v1
 model = gpt-4o-mini
+lang = en
 ```
 
 `base_url` and `model` are optional and default to the values above. Any
 OpenAI-compatible endpoint works. Diffs longer than 50000 characters are
-truncated before the API call to stay within the model's token limit.
+condensed per-file before the API call to stay within the model's token
+limit. Large changesets preserve file-level structure: every file's
+header and hunk headers survive, only verbose content within each file
+is trimmed. A `git diff --stat` summary is always included so the model
+sees the full scope even when the diff is condensed.
+
+**Commit message language** - `lang` controls the output language:
+
+| Value | Effect |
+|------|--------|
+| `en` | English (default) |
+| `zh` | Chinese |
+| (any text) | Custom instruction, e.g. `Write in Japanese` |
+
+On first run in interactive mode, you'll be prompted to pick. Override at
+any time with `-lang`:
+
+```bash
+$ v gencm -lang zh        # Chinese
+$ v gencm -lang "Write in Japanese"
+```
 
 **Interactive menu** (non-pipe mode only): after generating a commit message,
 choose an action:
@@ -444,7 +535,7 @@ choose an action:
 | `3` | Commit and push |
 | `4` | Do nothing |
 
-Pipe mode (`-p`) and `-c` flag skip the menu — they just print the message
+Pipe mode and the `-copy` flag skip the menu — they just print the message
 (or print + copy).
 
 ## Development
@@ -454,10 +545,12 @@ Pipe mode (`-p`) and `-c` flag skip the menu — they just print the message
 ```
 v/
 ├── main.go              # Entry point and plugin orchestration
+├── Makefile             # build / test / release targets (owns the version ldflags)
 ├── cmd/
-│   └── install.sh       # Installation script for Linux/macOS
+│   └── install.sh       # Installation script for Linux/macOS/Termux
 ├── service/
-│   └── plugin.go        # Plugin registry and PluginTemplate interface
+│   ├── plugin.go        # Plugin registry and PluginTemplate interface
+│   └── help.go          # Help() output; VVersion (injected at link time)
 ├── plugin/
 │   ├── pwd/             # pwd command implementation
 │   ├── tt/              # timestamp converter implementation
@@ -467,8 +560,8 @@ v/
 │   ├── jv/              # JSON viewer
 │   ├── diff/            # Side-by-side diff viewer
 │   ├── cp/              # Copy to clipboard (pipe-friendly)
-│   ├── enc/             # Encode/Decode utility (base64, url, hex, html)
-│   ├── gcm/             # AI commit message generator
+│   ├── codec/           # Encode/Decode utility (base64, url, hex, html, unicode)
+│   └── gcm/             # AI commit message generator (command: gencm)
 └── setting/
     └── ini.go           # Configuration management
 ```
@@ -493,19 +586,24 @@ type PluginTemplate interface {
 ```
 
 3. Register your plugin in `service/plugin.go`
+4. Follow the flag conventions above — in particular, always handle `-h`
 
 ### Build Commands
 
-```bash
-# Build for current platform
-go build -o v main.go
+The version reported by `v -version` is injected at link time. It is `dev` for
+local builds and the release tag for published binaries.
 
-# Build for all platforms
-GOOS=darwin GOARCH=amd64 go build -o v-darwin-amd64 main.go
-GOOS=darwin GOARCH=arm64 go build -o v-darwin-arm64 main.go
-GOOS=linux GOARCH=amd64 go build -o v-linux-amd64 main.go
-GOOS=windows GOARCH=amd64 go build -o v.exe main.go
+```bash
+make build                    # dev build
+make build VERSION=0.0.6      # inject a specific version
+make test                     # go vet ./... && go test ./...
+make release VERSION=0.0.6    # cross-compile all platforms into ./output
+make help                     # list targets
+
+go build -o v .               # plain build; reports "dev"
 ```
+
+Note the build target is `.`, not `main.go` — the root package spans several files.
 
 ### Testing
 

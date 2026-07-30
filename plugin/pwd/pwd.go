@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/atotto/clipboard"
+	"github.com/gookit/color"
 )
 
 type Pwd struct {
@@ -21,7 +22,9 @@ func (p *Pwd) Init() error {
 	p.version = "0.0.1"
 	p.description = "print working directory and copy to clipboard"
 	p.command = "pwd"
-	p.args = map[string]string{}
+	p.args = map[string]string{
+		"-h": "Show help",
+	}
 	p.author = "vst"
 	return nil
 }
@@ -46,6 +49,14 @@ func (p *Pwd) GetAuthor() string {
 }
 
 func (p *Pwd) Run(args []string) error {
+	for _, arg := range args {
+		switch arg {
+		case "-h", "-help", "--help":
+			p.printHelp()
+			return nil
+		}
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current working directory: %w", err)
@@ -59,6 +70,17 @@ func (p *Pwd) Run(args []string) error {
 
 	fmt.Println("\n✅ Copied to clipboard")
 	return nil
+}
+
+func (p *Pwd) printHelp() {
+	color.Println("<gray>--------------------------------------------------</>")
+	color.Printf("<fg=cyan;op=bold>pwd - Print Working Directory v%s</>\n\n", p.version)
+	color.Println("<fg=magenta;op=bold>Usage:</>")
+	color.Println("  v pwd    Print the current directory and copy it to clipboard")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Options:</>")
+	color.Println("  <green>-h</>   Show this help")
+	color.Println("<gray>--------------------------------------------------</>")
 }
 func (p *Pwd) Stop() error {
 	return nil

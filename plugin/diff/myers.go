@@ -8,16 +8,16 @@ import (
 type Op int
 
 const (
-	OpEqual  Op = iota // line is present in both sides
-	OpAdd              // line exists only in the right (added)
-	OpDel              // line exists only in the left (deleted)
+	OpEqual Op = iota // line is present in both sides
+	OpAdd             // line exists only in the right (added)
+	OpDel             // line exists only in the left (deleted)
 )
 
 // DiffLine represents a single line in the diff result.
 type DiffLine struct {
-	Op      Op
-	Left    string  // text from left side (empty for Add)
-	Right   string  // text from right side (empty for Del)
+	Op       Op
+	Left     string // text from left side (empty for Add)
+	Right    string // text from right side (empty for Del)
 	LeftNum  int    // left line number (1-based, 0 if not present)
 	RightNum int    // right line number (1-based, 0 if not present)
 }
@@ -41,9 +41,9 @@ func DiffLines(left, right string) []DiffLine {
 		switch op.typ {
 		case opEqual:
 			result = append(result, DiffLine{
-				Op:      OpEqual,
-				Left:    leftLines[i],
-				Right:   rightLines[j],
+				Op:       OpEqual,
+				Left:     leftLines[i],
+				Right:    rightLines[j],
 				LeftNum:  i + 1,
 				RightNum: j + 1,
 			})

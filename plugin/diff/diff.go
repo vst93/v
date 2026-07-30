@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/atotto/clipboard"
+	"github.com/gookit/color"
 )
 
 type Diff struct {
@@ -23,48 +24,47 @@ func (d *Diff) Init() error {
 	d.description = "Side-by-side text diff viewer with search and inline word-level highlighting"
 	d.command = "diff"
 	d.args = map[string]string{
-		"-left":   "Left file path (or text if -right is also text)",
-		"-right":  "Right file path (or text)",
-		"-file1":  "Alias for -left",
-		"-file2":  "Alias for -right",
-		"-clip":   "Diff clipboard against another source (use with -right)",
+		"-left":   "Left file path",
+		"-right":  "Right file path",
+		"-clip":   "Read clipboard as a source (use with -left or -right)",
 		"-pipe":   "Read from pipe/stdin (auto-detected, used as left side)",
 		"-inline": "Inline (unified) diff output instead of TUI",
 		"-raw":    "Plain text output (no colors, use with -inline)",
+		"-h":      "Show help",
 	}
 	d.author = "vst"
 	return nil
 }
 
-func (d *Diff) GetName() string        { return d.name }
-func (d *Diff) GetVersion() string     { return d.version }
-func (d *Diff) GetDescription() string { return d.description }
-func (d *Diff) GetCommand() string     { return d.command }
+func (d *Diff) GetName() string            { return d.name }
+func (d *Diff) GetVersion() string         { return d.version }
+func (d *Diff) GetDescription() string     { return d.description }
+func (d *Diff) GetCommand() string         { return d.command }
 func (d *Diff) GetArgs() map[string]string { return d.args }
-func (d *Diff) GetAuthor() string      { return d.author }
-func (d *Diff) Stop() error            { return nil }
+func (d *Diff) GetAuthor() string          { return d.author }
+func (d *Diff) Stop() error                { return nil }
 
 func (d *Diff) Run(args []string) error {
 	var (
-		leftPath   string
-		rightPath  string
-		inline     bool
-		raw        bool
-		pipeData   string
-		hasPipe    bool
-		useClip    bool
+		leftPath  string
+		rightPath string
+		inline    bool
+		raw       bool
+		pipeData  string
+		hasPipe   bool
+		useClip   bool
 	)
 
 	// Parse args
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "-left", "-file1":
+		case "-left":
 			if i+1 < len(args) {
 				leftPath = args[i+1]
 				i++
 			}
-		case "-right", "-file2":
+		case "-right":
 			if i+1 < len(args) {
 				rightPath = args[i+1]
 				i++
@@ -81,7 +81,7 @@ func (d *Diff) Run(args []string) error {
 				hasPipe = true
 				i++
 			}
-		case "-h", "--help":
+		case "-h", "-help", "--help":
 			d.printHelp()
 			return nil
 		}
@@ -197,39 +197,25 @@ func (d *Diff) printInline(lines []DiffLine, leftName, rightName string, raw boo
 }
 
 func (d *Diff) printHelp() {
-	fmt.Printf("diff - Side-by-side Text Diff Viewer v%s\n\n", d.version)
-	fmt.Println("Usage:")
-	fmt.Println("  v diff -left <file1> -right <file2>    Compare two files (interactive TUI)")
-	fmt.Println("  v diff -file1 <f1> -file2 <f2>          Alias for -left/-right")
-	fmt.Println("  v diff -left <file> -clip               Compare file vs clipboard")
-	fmt.Println("  echo 'text' | v diff -right <file>       Compare pipe vs file")
-	fmt.Println("  v diff                                  Paste mode: paste left/right text in TUI")
-	fmt.Println()
-	fmt.Println("Options:")
-	fmt.Println("  -inline    Output unified diff to stdout (no TUI)")
-	fmt.Println("  -raw       Plain text output (with -inline, no colors)")
-	fmt.Println("  -h         Show this help")
-	fmt.Println()
-	fmt.Println("Interactive viewer keys:")
-	fmt.Println("  ↑↓ / jk    Navigate up/down")
-	fmt.Println("  n / N      Next / previous diff hunk")
-	fmt.Println("  /          Search (type term, Enter to jump)")
-	fmt.Println("  c          Show only changed lines")
-	fmt.Println("  a          Show all lines")
-	fmt.Println("  q          Quit")
-	fmt.Println("  e          Edit (return to paste mode, when launched with no files)")
-	fmt.Println()
-	fmt.Println("Paste mode keys:")
-	fmt.Println("  Tab        Switch left/right panel")
-	fmt.Println("  Ctrl-A     Select all")
-	fmt.Println("  Ctrl-C/X/V Copy / cut / paste")
-	fmt.Println("  Ctrl-D     Compute diff")
-	fmt.Println("  Esc        Quit")
-	fmt.Println()
-	fmt.Println("Colors:")
-	fmt.Println("  Red    = deleted (left only)")
-	fmt.Println("  Green  = added (right only)")
-	fmt.Println("  Orange = changed (word-level inline diff)")
+	color.Println("<gray>--------------------------------------------------</>")
+	color.Printf("<fg=cyan;op=bold>diff - Side-by-side Text Diff Viewer v%s</>\n\n", d.version)
+	color.Println("<fg=magenta;op=bold>Usage:</>")
+	color.Println("  v diff <green>-left</> <f1> <green>-right</> <f2>    Compare two files (interactive TUI)")
+	color.Println("  v diff <green>-left</> <file> <green>-clip</>        Compare file vs clipboard")
+	color.Println("  echo 'text' | v diff <green>-right</> <f>   Compare pipe vs file")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Options:</>")
+	color.Println("  <green>-left</> <path>   Left file path")
+	color.Println("  <green>-right</> <path>  Right file path")
+	color.Println("  <green>-inline</>        Unified diff to stdout (no TUI)")
+	color.Println("  <green>-raw</>           Plain text output (with -inline)")
+	color.Println()
+	color.Println("<gray>I/O: -pipe (auto, as left side) · -clip · -h</>")
+	color.Println()
+	color.Println("<gray>Viewer: ↑↓/jk nav · n/N next-prev hunk · / search · c changed · a all · e edit · q quit</>")
+	color.Println("<gray>Paste:  Tab switch · Ctrl-A/C/X/V · Ctrl-D diff · Esc quit</>")
+	color.Println("<gray>Colors: red=deleted · green=added · orange=changed</>")
+	color.Println("<gray>--------------------------------------------------</>")
 }
 
 func expandHome(path string) string {

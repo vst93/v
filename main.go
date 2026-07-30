@@ -28,8 +28,10 @@ func main() {
 
 	// Command aliases (short forms)
 	aliases := map[string]string{
-		"gp": "genpwd",
-		"gc": "gcm",
+		"gp":  "genpwd",
+		"gc":  "gencm",
+		"cc":  "codec",
+		"enc": "codec", // former name, kept so existing habits keep working
 	}
 	if real, ok := aliases[firstArg]; ok {
 		firstArg = real
@@ -38,6 +40,9 @@ func main() {
 	switch firstArg {
 	case "-help", "--help", "-h":
 		fmt.Println(service.Help())
+		return
+	case "-v", "-version", "--version":
+		fmt.Println(service.VVersion)
 		return
 	}
 
@@ -54,4 +59,6 @@ func main() {
 			return
 		}
 	}
+
+	fmt.Printf("Unknown command: %s\nRun `v -h` to see the available commands.\n", firstArg)
 }

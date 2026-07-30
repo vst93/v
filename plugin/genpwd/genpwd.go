@@ -150,31 +150,32 @@ func (g *Genpwd) Init() error {
 	g.description = "Random password generator with interactive TUI - configure rules and generate secure passwords"
 	g.command = "genpwd"
 	g.args = map[string]string{
-		"-l":  "Password length (default 16)",
-		"-n":  "Number of passwords to generate (non-interactive mode)",
-		"-c":  "Copy generated password to clipboard (non-interactive mode)",
-		"-nl": "Exclude lowercase letters (non-interactive mode)",
-		"-nu": "Exclude uppercase letters (non-interactive mode)",
-		"-nd": "Exclude digits (non-interactive mode)",
-		"-ns": "Exclude special characters (non-interactive mode)",
-		"-i":  "Force interactive TUI mode",
+		"-l":    "Password length (default 16)",
+		"-n":    "Number of passwords to generate (non-interactive mode)",
+		"-nl":   "Exclude lowercase letters (non-interactive mode)",
+		"-nu":   "Exclude uppercase letters (non-interactive mode)",
+		"-nd":   "Exclude digits (non-interactive mode)",
+		"-ns":   "Exclude special characters (non-interactive mode)",
+		"-copy": "Copy generated password to clipboard (non-interactive mode)",
+		"-tui":  "Force interactive TUI mode",
+		"-h":    "Show help",
 	}
 	g.author = "vst"
 	return nil
 }
 
-func (g *Genpwd) GetName() string        { return g.name }
-func (g *Genpwd) GetVersion() string     { return g.version }
-func (g *Genpwd) GetDescription() string { return g.description }
-func (g *Genpwd) GetCommand() string     { return g.command }
+func (g *Genpwd) GetName() string            { return g.name }
+func (g *Genpwd) GetVersion() string         { return g.version }
+func (g *Genpwd) GetDescription() string     { return g.description }
+func (g *Genpwd) GetCommand() string         { return g.command }
 func (g *Genpwd) GetArgs() map[string]string { return g.args }
-func (g *Genpwd) GetAuthor() string      { return g.author }
-func (g *Genpwd) Stop() error            { return nil }
+func (g *Genpwd) GetAuthor() string          { return g.author }
+func (g *Genpwd) Stop() error                { return nil }
 
 func (g *Genpwd) Run(args []string) error {
 	var (
-		length     int  = 16
-		count      int  = 1
+		length     int = 16
+		count      int = 1
 		copyClip   bool
 		noLower    bool
 		noUpper    bool
@@ -204,7 +205,7 @@ func (g *Genpwd) Run(args []string) error {
 				count = n
 				i++
 			}
-		case "-c":
+		case "-copy":
 			copyClip = true
 		case "-nl":
 			noLower = true
@@ -214,9 +215,9 @@ func (g *Genpwd) Run(args []string) error {
 			noDigit = true
 		case "-ns":
 			noSpecial = true
-		case "-i":
+		case "-tui", "-i":
 			forceInter = true
-		case "-h", "--help":
+		case "-h", "-help", "--help":
 			g.printHelp()
 			return nil
 		}
@@ -268,38 +269,24 @@ func (g *Genpwd) Run(args []string) error {
 }
 
 func (g *Genpwd) printHelp() {
-	fmt.Printf("genpwd - Random Password Generator v%s\n\n", g.version)
-	fmt.Println("Usage:")
-	fmt.Println("  v gp                         Interactive TUI (default, short command)")
-	fmt.Println("  v genpwd                     Same as above (full name)")
-	fmt.Println("  v gp -l 20                   Generate a 20-char password to stdout")
-	fmt.Println("  v gp -l 12 -n 5              Generate 5 passwords of length 12")
-	fmt.Println("  v gp -l 16 -c                Generate and copy to clipboard")
-	fmt.Println("  v gp -l 16 -ns               No special characters")
-	fmt.Println()
-	fmt.Println("Options:")
-	fmt.Println("  -l N    Password length (default 16)")
-	fmt.Println("  -n N    Number of passwords (non-interactive, default 1)")
-	fmt.Println("  -c      Copy to clipboard (non-interactive)")
-	fmt.Println("  -nl     Exclude lowercase letters")
-	fmt.Println("  -nu     Exclude uppercase letters")
-	fmt.Println("  -nd     Exclude digits")
-	fmt.Println("  -ns     Exclude special characters")
-	fmt.Println("  -i      Force interactive TUI mode")
-	fmt.Println("  -h      Show this help")
-	fmt.Println()
-	fmt.Println("Interactive TUI keys:")
-	fmt.Println("  ← →     Adjust length (presets: 8 12 16 20 24 32 48 64)")
-	fmt.Println("  Enter   Custom length input (on length row)")
-	fmt.Println("  Space   Next preset / toggle checkbox")
-	fmt.Println("  Tab/↑↓  Navigate between options")
-	fmt.Println("  r       Regenerate password")
-	fmt.Println("  y       Copy password to clipboard")
-	fmt.Println("  q       Quit")
-	fmt.Println()
-	fmt.Println("Character sets:")
-	fmt.Printf("  Lowercase: %s (%d)\n", lowercaseChars, len(lowercaseChars))
-	fmt.Printf("  Uppercase: %s (%d)\n", uppercaseChars, len(uppercaseChars))
-	fmt.Printf("  Digits:    %s (%d)\n", digitChars, len(digitChars))
-	fmt.Printf("  Special:   %s (%d)\n", specialChars, len(specialChars))
+	color.Println("<gray>--------------------------------------------------</>")
+	color.Printf("<fg=cyan;op=bold>genpwd - Random Password Generator v%s</>\n\n", g.version)
+	color.Println("<fg=magenta;op=bold>Usage:</>")
+	color.Println("  v gp                 Interactive TUI (default)")
+	color.Println("  v gp <green>-l</> 20           Generate a 20-char password to stdout")
+	color.Println("  v gp <green>-l</> 12 <green>-n</> 5      Generate 5 passwords of length 12")
+	color.Println("  v gp <green>-l</> 16 <green>-copy</> <green>-ns</> Generate, copy, no special chars")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Options:</>")
+	color.Println("  <green>-l</> N    Password length (default 16)")
+	color.Println("  <green>-n</> N    Number of passwords (non-interactive, default 1)")
+	color.Println("  <green>-nl</>     Exclude lowercase letters")
+	color.Println("  <green>-nu</>     Exclude uppercase letters")
+	color.Println("  <green>-nd</>     Exclude digits")
+	color.Println("  <green>-ns</>     Exclude special characters")
+	color.Println()
+	color.Println("<gray>I/O: -copy (non-interactive) · -tui (force TUI) · -h</>")
+	color.Println()
+	color.Println("<gray>TUI: length presets · Space toggle · Tab/↑↓ nav · r regenerate · y copy · q quit</>")
+	color.Println("<gray>--------------------------------------------------</>")
 }

@@ -42,8 +42,10 @@ func SaveSetting() error {
 	return nil
 }
 
-func Set(section, key, value string) error {
-	err := ini.Set(section, key, value)
+// Set writes a value to the ini config and persists it to disk.
+// section is optional; defaults to the empty (default) section.
+func Set(key, val, section string) error {
+	err := ini.Set(key, val, section)
 	if err != nil {
 		return err
 	}

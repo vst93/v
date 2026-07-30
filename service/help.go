@@ -6,7 +6,11 @@ import (
 	"strings"
 )
 
-var VVersion = "0.0.5"
+// VVersion is the binary version. It stays "dev" for plain `go build` and is
+// overwritten at link time by the release build:
+//
+//	go build -ldflags "-X v/service.VVersion=0.0.6" .
+var VVersion = "dev"
 
 func Help() string {
 	pluginList := Plugin{}
@@ -23,7 +27,7 @@ func Help() string {
 
 	out.WriteString(color.New(color.FgMagenta, color.Bold).Sprint("Available Plugins"))
 	out.WriteString("\n")
-	out.WriteString(color.New(color.FgBlack).Sprint(strings.Repeat("=", 50)))
+	out.WriteString(color.New(color.FgDarkGray).Sprint(strings.Repeat("=", 50)))
 	out.WriteString("\n")
 
 	for _, plugin := range pluginList.List() {
@@ -36,27 +40,18 @@ func Help() string {
 		out.WriteString(color.New(color.FgDarkGray).Sprint("👤 ") + color.New(color.FgBlue).Sprint(info.Author))
 		out.WriteString("\n")
 
-		out.WriteString(color.New(color.FgWhite).Sprint("" + info.Description))
-		out.WriteString("\n")
-
-		out.WriteString(color.New(color.FgCyan).Sprint("Command: "))
-		out.WriteString(color.New(color.FgGreen).Sprint("v ") + info.Command)
-		out.WriteString("\n")
-
-		if len(info.Args) > 0 {
-			out.WriteString(color.New(color.FgCyan).Sprint("Args:"))
-			for k, v := range info.Args {
-				out.WriteString("\n")
-				out.WriteString(color.New(color.FgMagenta).Sprint(k))
-				out.WriteString(color.New(color.FgMagenta).Sprint(": "))
-				out.WriteString(color.New(color.FgWhite).Sprint(v))
-			}
-			out.WriteString("\n")
-		}
-
-		out.WriteString(color.New(color.FgBlack).Sprint(strings.Repeat("-", 50)))
-		out.WriteString("\n")
+		out.WriteString(color.New(color.FgWhite).Sprint("  " + info.Description))
+		out.WriteString("\n\n")
 	}
+
+	out.WriteString(color.New(color.FgDarkGray).Sprint(strings.Repeat("-", 50)))
+	out.WriteString("\n")
+	out.WriteString(color.New(color.FgCyan).Sprint("Run "))
+	out.WriteString(color.New(color.FgGreen, color.Bold).Sprint("v <command> -h"))
+	out.WriteString(color.New(color.FgCyan).Sprint(" for detailed help."))
+	out.WriteString("\n")
+	out.WriteString(color.New(color.FgDarkGray).Sprint("Aliases: gp=genpwd  gc=gencm  cc=codec  enc=codec"))
+	out.WriteString("\n")
 
 	result := strings.TrimSpace(out.String())
 	return result

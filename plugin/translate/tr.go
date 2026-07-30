@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"v/setting"
+
+	"github.com/gookit/color"
 )
 
 type Tr struct {
@@ -22,6 +24,7 @@ func (t *Tr) Init() error {
 	t.command = "tr"
 	t.args = map[string]string{
 		"-[disable/enable]-[google/cnki]": "Disable/Enable Google Translate or CNKI Translate",
+		"-h":                              "Show help",
 	}
 	t.author = "vst"
 	return nil
@@ -78,6 +81,9 @@ func (t *Tr) Run(args []string) error {
 		}
 		fmt.Println("CNKI Translate enabled")
 		return nil
+	case "-h", "-help", "--help":
+		t.printHelp()
+		return nil
 	default:
 	}
 	if text == "" {
@@ -90,4 +96,21 @@ func (t *Tr) Run(args []string) error {
 }
 func (t *Tr) Stop() error {
 	return nil
+}
+
+func (t *Tr) printHelp() {
+	color.Println("<gray>--------------------------------------------------</>")
+	color.Printf("<fg=cyan;op=bold>tr - Text Translator v%s</>\n\n", t.version)
+	color.Println("<fg=magenta;op=bold>Usage:</>")
+	color.Println("  v tr 'Hello World'    Translate text (Google + CNKI, Youdao for words)")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Options:</>")
+	color.Println("  <green>-enable-google</>    Enable Google Translate")
+	color.Println("  <green>-disable-google</>   Disable Google Translate")
+	color.Println("  <green>-enable-cnki</>      Enable CNKI Translate")
+	color.Println("  <green>-disable-cnki</>     Disable CNKI Translate")
+	color.Println("  <green>-h</>                Show this help")
+	color.Println()
+	color.Println("<gray>Requires an internet connection. Settings persist in ~/.v_tools/settings.ini.</>")
+	color.Println("<gray>--------------------------------------------------</>")
 }

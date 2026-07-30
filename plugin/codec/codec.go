@@ -1,4 +1,4 @@
-package plugin_enc
+package plugin_codec
 
 import (
 	"encoding/base32"
@@ -12,9 +12,10 @@ import (
 	"strings"
 
 	"github.com/atotto/clipboard"
+	"github.com/gookit/color"
 )
 
-type Enc struct {
+type Codec struct {
 	name        string
 	version     string
 	description string
@@ -23,17 +24,17 @@ type Enc struct {
 	author      string
 }
 
-func (e *Enc) Init() error {
-	e.name = "enc"
-	e.version = "0.0.1"
-	e.description = "Encode/Decode text: base64, url, hex, html, base32"
-	e.command = "enc"
-	e.args = map[string]string{
+func (c *Codec) Init() error {
+	c.name = "codec"
+	c.version = "1.0.0"
+	c.description = "Encode/Decode text: base64, base32, url, hex, html, unicode"
+	c.command = "codec"
+	c.args = map[string]string{
 		"-b64":   "Base64 encode",
 		"-b64d":  "Base64 decode",
 		"-b32":   "Base32 encode",
 		"-b32d":  "Base32 decode",
-		"-url":   "URL encode",
+		"-url":   "URL encode (percent-encoding)",
 		"-urld":  "URL decode",
 		"-hex":   "Hex encode",
 		"-hexd":  "Hex decode",
@@ -42,29 +43,35 @@ func (e *Enc) Init() error {
 		"-uni":   "Unicode escape (non-ASCII to \\uXXXX)",
 		"-unid":  "Unicode unescape (\\uXXXX to UTF-8)",
 		"-file":  "Read from file path instead of clipboard/arg",
-		"-c":     "Copy result to clipboard",
+		"-clip":  "Read from clipboard (the default when nothing else is given)",
 		"-pipe":  "Read from pipe/stdin (auto-detected)",
+		"-out":   "Write the result to a file instead of stdout",
+		"-copy":  "Copy result to clipboard",
+		"-tui":   "Interactive TUI (default when no mode given)",
 		"-h":     "Show help",
 	}
-	e.author = "vst"
+	c.author = "vst"
 	return nil
 }
 
-func (e *Enc) GetName() string            { return e.name }
-func (e *Enc) GetVersion() string         { return e.version }
-func (e *Enc) GetDescription() string     { return e.description }
-func (e *Enc) GetCommand() string         { return e.command }
-func (e *Enc) GetArgs() map[string]string { return e.args }
-func (e *Enc) GetAuthor() string          { return e.author }
-func (e *Enc) Stop() error                { return nil }
+func (c *Codec) GetName() string            { return c.name }
+func (c *Codec) GetVersion() string         { return c.version }
+func (c *Codec) GetDescription() string     { return c.description }
+func (c *Codec) GetCommand() string         { return c.command }
+func (c *Codec) GetArgs() map[string]string { return c.args }
+func (c *Codec) GetAuthor() string          { return c.author }
+func (c *Codec) Stop() error                { return nil }
 
-func (e *Enc) Run(args []string) error {
+func (c *Codec) Run(args []string) error {
 	var (
 		mode     string
 		filePath string
+		outPath  string
 		pipeData string
 		hasPipe  bool
+		useClip  bool
 		copyCB   bool
+		forceTUI bool
 		input    string
 		hasInput bool
 	)
@@ -101,16 +108,25 @@ func (e *Enc) Run(args []string) error {
 				filePath = args[i+1]
 				i++
 			}
-		case "-c":
+		case "-out":
+			if i+1 < len(args) {
+				outPath = args[i+1]
+				i++
+			}
+		case "-clip":
+			useClip = true
+		case "-copy":
 			copyCB = true
+		case "-tui":
+			forceTUI = true
 		case "-pipe":
 			if i+1 < len(args) {
 				pipeData = args[i+1]
 				hasPipe = true
 				i++
 			}
-		case "-h", "--help":
-			e.printHelp()
+		case "-h", "-help", "--help":
+			c.printHelp()
 			return nil
 		default:
 			if !strings.HasPrefix(arg, "-") && !hasInput {
@@ -120,24 +136,30 @@ func (e *Enc) Run(args []string) error {
 		}
 	}
 
-	if mode == "" && !hasPipe && filePath == "" && !hasInput {
-		// No args at all -> launch TUI
-		return runTUI()
+	// No mode at all -> interactive TUI, seeded with whatever input was given.
+	if forceTUI || (mode == "" && !hasPipe && filePath == "" && !hasInput && !useClip) {
+		seed := ""
+		switch {
+		case hasPipe:
+			seed = pipeData
+		case hasInput:
+			seed = input
+		}
+		return runTUI(seed)
 	}
 
 	if mode == "" {
-		e.printHelp()
+		c.printHelp()
 		return nil
 	}
 
-	// Get input
+	// Get input. Priority: pipe > file > argument > clipboard.
 	var inputData string
 	switch {
 	case hasPipe:
 		inputData = pipeData
 	case filePath != "":
-		filePath = expandHome(filePath)
-		data, err := os.ReadFile(filePath)
+		data, err := os.ReadFile(expandHome(filePath))
 		if err != nil {
 			return fmt.Errorf("failed to read file: %w", err)
 		}
@@ -145,7 +167,6 @@ func (e *Enc) Run(args []string) error {
 	case hasInput:
 		inputData = input
 	default:
-		// Try clipboard
 		clip, err := clipboard.ReadAll()
 		if err != nil || clip == "" {
 			return fmt.Errorf("no input provided: use -file, -pipe, pass text as argument, or copy to clipboard")
@@ -153,12 +174,19 @@ func (e *Enc) Run(args []string) error {
 		inputData = clip
 	}
 
-	result, err := e.transform(mode, inputData)
+	result, err := doTransform(mode, inputData)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println(result)
+	if outPath != "" {
+		if err := os.WriteFile(expandHome(outPath), []byte(result+"\n"), 0o644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", outPath, err)
+		}
+		fmt.Printf("✅ Written to %s\n", outPath)
+	} else {
+		fmt.Println(result)
+	}
 
 	if copyCB {
 		if err := clipboard.WriteAll(result); err != nil {
@@ -170,11 +198,7 @@ func (e *Enc) Run(args []string) error {
 	return nil
 }
 
-func (e *Enc) transform(mode, input string) (string, error) {
-	return doTransform(mode, input)
-}
-
-// doTransform is the standalone transform function (also used by the TUI).
+// doTransform applies a single codec mode. Shared by the CLI and the TUI.
 func doTransform(mode, input string) (string, error) {
 	switch mode {
 	case "base64enc":
@@ -222,53 +246,40 @@ func doTransform(mode, input string) (string, error) {
 	}
 }
 
-func (e *Enc) printHelp() {
-	fmt.Println(`📦 enc - Encode/Decode Utility
-
-Usage: v enc <mode> [input] [options]
-
-Modes:
-  -b64      Base64 encode
-  -b64d     Base64 decode
-  -b32      Base32 encode
-  -b32d     Base32 decode
-  -url      URL encode (percent-encoding)
-  -urld     URL decode
-  -hex      Hex encode
-  -hexd     Hex decode
-  -html     HTML escape
-  -htmld    HTML unescape
-  -uni      Unicode escape (non-ASCII to \uXXXX)
-  -unid     Unicode unescape (\uXXXX to UTF-8)
-
-Input sources (priority: pipe > file > argument > clipboard):
-  (text)     Pass text directly as argument
-  -file      Read from file
-  -pipe      Read from stdin/pipe (auto-detected)
-  (none)     Read from clipboard
-
-Options:
-  -c         Copy result to clipboard
-  -h         Show this help
-
-Examples:
-  v enc -b64 "Hello World"
-  echo "Hello" | v enc -b64 -c
-  v enc -b64d "SGVsbG8gV29ybGQ="
-  v enc -url "hello world&foo=bar"
-  v enc -hexd "48656c6c6f"
-  v enc -uni "你好"
-  v enc -unid "\u4f60\u597d"`)
+func (c *Codec) printHelp() {
+	color.Println("<gray>--------------------------------------------------</>")
+	color.Printf("<fg=cyan;op=bold>codec - Encode/Decode Utility v%s</>\n\n", c.version)
+	color.Println("Usage: v codec [mode] [input] [options]")
+	color.Println("<gray>Short command: cc (v enc also still works)</>")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Modes:</>")
+	color.Println("  <green>-b64</>    Base64 encode      <green>-b64d</>   Base64 decode")
+	color.Println("  <green>-b32</>    Base32 encode      <green>-b32d</>   Base32 decode")
+	color.Println("  <green>-url</>    URL encode         <green>-urld</>   URL decode")
+	color.Println("  <green>-hex</>    Hex encode         <green>-hexd</>   Hex decode")
+	color.Println("  <green>-html</>   HTML escape        <green>-htmld</>  HTML unescape")
+	color.Println("  <green>-uni</>    Unicode escape     <green>-unid</>   Unicode unescape")
+	color.Println()
+	color.Println("<gray>I/O: -pipe (auto) · -file <path> · -clip · -out <path> · -copy · -tui · -h</>")
+	color.Println("<gray>     No mode launches the interactive TUI.</>")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Examples:</>")
+	color.Println(`  v codec <green>-b64</> "Hello World"`)
+	color.Println(`  echo "Hello" | v codec <green>-b64</> <green>-copy</>`)
+	color.Println(`  v codec <green>-b64d</> "SGVsbG8gV29ybGQ="`)
+	color.Println("<gray>--------------------------------------------------</>")
 }
 
+// expandHome expands ~ to the user's home directory.
 func expandHome(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			return home + path[1:]
-		}
+	if !strings.HasPrefix(path, "~") {
+		return path
 	}
-	return path
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return home + path[1:]
 }
 
 // escapeUnicode replaces all non-ASCII runes with \uXXXX escapes,
@@ -279,13 +290,13 @@ func escapeUnicode(input string) string {
 		if r < 128 {
 			sb.WriteRune(r)
 		} else if r <= 0xFFFF {
-			sb.WriteString(fmt.Sprintf(`\u%04x`, r))
+			fmt.Fprintf(&sb, `\u%04x`, r)
 		} else {
 			// surrogate pair
 			r -= 0x10000
 			high := 0xD800 + (r >> 10)
 			low := 0xDC00 + (r & 0x3FF)
-			sb.WriteString(fmt.Sprintf(`\u%04x\u%04x`, high, low))
+			fmt.Fprintf(&sb, `\u%04x\u%04x`, high, low)
 		}
 	}
 	return sb.String()

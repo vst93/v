@@ -3,50 +3,87 @@ on:
     types: [created]
 
 permissions:
- contents: write
- packages: write
+  contents: write
+  packages: write
 
 env:
   BINARY_PREFIX: "v"
-  BINARY_SUFFIX: ""
-  LD_FLAGS: "-w -s"
+  GO_VERSION: "1.24.3"
 
 jobs:
-  build:
-    name: Build binary CI
+  test:
+    name: Vet & test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        goos: [linux, windows, darwin, android]
-        goarch: [amd64, arm64]
-        exclude:
-         - goos: windows
-           goarch: arm64
-
-      fail-fast: true
     steps:
       - uses: actions/checkout@v4
       - name: Setup Go environment
         uses: actions/setup-go@v6
         with:
-          go-version: 1.24.3
-      - name: Cache downloaded module
-        uses: actions/cache@v4
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+
+  build:
+    name: Build binary CI
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin, android]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+      # Keep going so one broken platform still lets the rest reach the release.
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go environment
+        uses: actions/setup-go@v6
         with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('**/go.sum') }}
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
       - name: Build binary file
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          if [ $GOOS == "windows" ]; then export BINARY_SUFFIX="$BINARY_SUFFIX.exe"; fi
-          if [ "$GOOS" == "android" ]; then declare -A goarch2cc=( ["arm64"]="aarch64-linux-android32-clang" ["arm"]="armv7a-linux-androideabi32-clang" ["amd64"]="x86_64-linux-android32-clang" ["386"]="i686-linux-android32-clang"); export CC="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/${goarch2cc[$GOARCH]}"; fi
+          set -euo pipefail
+
+          # Software version = release tag with any leading "v" stripped.
+          VERSION="${RELEASE_TAG#v}"
+          if [ -z "$VERSION" ]; then
+            echo "::error::release tag is empty, cannot determine version"
+            exit 1
+          fi
+          echo "Building version $VERSION for $GOOS/$GOARCH"
+
+          BINARY_SUFFIX=""
+          if [ "$GOOS" == "windows" ]; then BINARY_SUFFIX=".exe"; fi
+
+          if [ "$GOOS" == "android" ]; then
+            declare -A goarch2cc=(
+              ["arm64"]="aarch64-linux-android32-clang"
+              ["arm"]="armv7a-linux-androideabi32-clang"
+              ["amd64"]="x86_64-linux-android32-clang"
+              ["386"]="i686-linux-android32-clang"
+            )
+            export CC="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/${goarch2cc[$GOARCH]}"
+          fi
+
           export BINARY_NAME="$BINARY_PREFIX$BINARY_SUFFIX"
           export CGO_ENABLED=$( [ "$GOOS" == "android" ] && echo 1 || echo 0 )
-          go build -o "$GITHUB_WORKSPACE/output/$BINARY_NAME" -trimpath -ldflags "$LD_FLAGS" .
+
+          go build \
+            -o "$GITHUB_WORKSPACE/output/$BINARY_NAME" \
+            -trimpath \
+            -ldflags "-w -s -X v/service.VVersion=$VERSION" \
+            .
+
           cd "$GITHUB_WORKSPACE/output"
           zip "$BINARY_PREFIX-$GOOS-$GOARCH.zip" "$BINARY_NAME"
           sha256sum "$BINARY_PREFIX-$GOOS-$GOARCH.zip" | awk '{printf $1}' > "$BINARY_PREFIX-$GOOS-$GOARCH.zip.sha256"

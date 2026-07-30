@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/atotto/clipboard"
+	"github.com/gookit/color"
 )
 
 type Cp struct {
@@ -42,13 +43,13 @@ func (c *Cp) Stop() error                { return nil }
 
 func (c *Cp) Run(args []string) error {
 	var (
-		pipeData string
-		hasPipe  bool
-		trim     bool
-		trimLeft bool
+		pipeData  string
+		hasPipe   bool
+		trim      bool
+		trimLeft  bool
 		trimRight bool
-		input    string
-		hasInput bool
+		input     string
+		hasInput  bool
 	)
 
 	for i := 0; i < len(args); i++ {
@@ -66,7 +67,7 @@ func (c *Cp) Run(args []string) error {
 				hasPipe = true
 				i++
 			}
-		case "-h", "--help":
+		case "-h", "-help", "--help":
 			c.printHelp()
 			return nil
 		default:
@@ -114,22 +115,22 @@ func (c *Cp) Run(args []string) error {
 }
 
 func (c *Cp) printHelp() {
-	fmt.Println(`📦 cp - Copy to Clipboard
-
-Copy text to clipboard. Designed for pipe mode to chain with other commands.
-
-Usage:
-  echo "text" | v cp              Copy piped stdin to clipboard
-  v cp "some text"                Copy argument to clipboard
-  echo "  hi  " | v cp -trim      Trim whitespace then copy
-  echo "  hi  " | v cp -triml     Trim leading whitespace only
-  echo "  hi  " | v cp -trimr     Trim trailing whitespace only
-
-Options:
-  -trim   Trim leading & trailing whitespace (spaces, tabs, newlines)
-  -triml  Trim leading whitespace only
-  -trimr  Trim trailing whitespace only
-  -h      Show this help
-
-Input priority: pipe > argument > clipboard`)
+	color.Println("<gray>--------------------------------------------------</>")
+	color.Println("<fg=cyan;op=bold>📦 cp - Copy to Clipboard</>")
+	color.Println()
+	color.Println("Copy text to clipboard. Designed for pipe mode to chain with other commands.")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Usage:</>")
+	color.Println(`  echo "text" | v cp              Copy piped stdin to clipboard`)
+	color.Println(`  v cp "some text"                Copy argument to clipboard`)
+	color.Println(`  echo "  hi  " | v cp <green>-trim</>      Trim whitespace then copy`)
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Options:</>")
+	color.Println("  <green>-trim</>   Trim leading & trailing whitespace (spaces, tabs, newlines)")
+	color.Println("  <green>-triml</>  Trim leading whitespace only")
+	color.Println("  <green>-trimr</>  Trim trailing whitespace only")
+	color.Println("  <green>-h</>      Show this help")
+	color.Println()
+	color.Println("<gray>Input priority: pipe > argument > clipboard</>")
+	color.Println("<gray>--------------------------------------------------</>")
 }

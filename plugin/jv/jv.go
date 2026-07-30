@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/atotto/clipboard"
+	"github.com/gookit/color"
 )
 
 type Jv struct {
@@ -30,12 +31,16 @@ func (j *Jv) Init() error {
 		"-c":    "Compress (minify) JSON to a single line",
 		"-e":    "Escape non-ASCII to \\uXXXX sequences",
 		"-u":    "Unescape \\uXXXX sequences to UTF-8 text",
-		"-i":    "Interactive tree viewer (default when no flag given)",
 		"-sort": "Sort object keys alphabetically",
+		"-tui":  "Interactive tree viewer (default when no mode given; -i is a synonym)",
 		"-file": "Read from file path instead of clipboard",
 		"-url":  "Read from URL (HTTP/HTTPS)",
-		"-raw":  "Disable colored output (plain text)",
+		"-clip": "Read from clipboard (the default source)",
 		"-pipe": "Read from pipe/stdin (auto-detected)",
+		"-out":  "Write the result to a file instead of stdout",
+		"-copy": "Copy the result to clipboard",
+		"-raw":  "Disable colored output (plain text)",
+		"-h":    "Show help",
 	}
 	j.author = "vst"
 	return nil
@@ -56,8 +61,10 @@ func (j *Jv) Run(args []string) error {
 		mode     string // "format", "compress", "escape", "unescape", "interactive"
 		filePath string
 		url      string
+		outPath  string
 		raw      bool
 		sortKeys bool
+		toClip   bool
 		pipeData string
 		hasPipe  bool
 	)
@@ -75,12 +82,17 @@ func (j *Jv) Run(args []string) error {
 			mode = "escape"
 		case "-u":
 			mode = "unescape"
-		case "-i":
+		case "-tui", "-i":
 			mode = "interactive"
 		case "-sort":
 			sortKeys = true
 		case "-raw":
 			raw = true
+		case "-copy":
+			toClip = true
+		case "-clip":
+			// Clipboard is already the default source; accepted for symmetry
+			// with the other plugins.
 		case "-file":
 			if i+1 < len(args) {
 				filePath = args[i+1]
@@ -91,13 +103,18 @@ func (j *Jv) Run(args []string) error {
 				url = args[i+1]
 				i++
 			}
+		case "-out":
+			if i+1 < len(args) {
+				outPath = args[i+1]
+				i++
+			}
 		case "-pipe":
 			if i+1 < len(args) {
 				pipeData = args[i+1]
 				hasPipe = true
 				i++
 			}
-		case "-h", "--help":
+		case "-h", "-help", "--help":
 			j.printHelp()
 			return nil
 		}
@@ -143,27 +160,61 @@ func (j *Jv) Run(args []string) error {
 	}
 
 	// Execute the selected mode
-	switch mode {
-	case "format":
-		return j.doFormat(inputData, sortKeys, raw)
-	case "compress":
-		return j.doCompress(inputData, sortKeys, true)
-	case "escape":
-		return j.doEscape(inputData)
-	case "unescape":
-		return j.doUnescape(inputData)
-	case "interactive":
-		return j.doInteractive(inputData, sortKeys, source)
-	default:
+	if mode == "interactive" {
 		return j.doInteractive(inputData, sortKeys, source)
 	}
+
+	// Colored output would leak ANSI escapes into a file or the clipboard,
+	// so those destinations always get plain text.
+	if outPath != "" || toClip {
+		raw = true
+	}
+
+	var output string
+	var err error
+	switch mode {
+	case "format":
+		output, err = j.doFormat(inputData, sortKeys, raw)
+	case "compress":
+		output, err = j.doCompress(inputData, sortKeys, true)
+	case "escape":
+		output, err = j.doEscape(inputData)
+	case "unescape":
+		output = UnescapeUnicode(inputData)
+	}
+	if err != nil {
+		return err
+	}
+
+	return emit(output, outPath, toClip)
+}
+
+// emit writes the result to stdout, and additionally to a file (-out) and/or
+// the clipboard (-copy).
+func emit(output, outPath string, toClip bool) error {
+	if outPath != "" {
+		if err := os.WriteFile(expandHome(outPath), []byte(output+"\n"), 0o644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", outPath, err)
+		}
+		fmt.Printf("✅ Written to %s\n", outPath)
+	} else {
+		fmt.Println(output)
+	}
+
+	if toClip {
+		if err := clipboard.WriteAll(output); err != nil {
+			return fmt.Errorf("failed to copy to clipboard: %w", err)
+		}
+		fmt.Println("✅ Copied to clipboard")
+	}
+	return nil
 }
 
 // doFormat pretty-prints JSON with optional color and key sorting.
-func (j *Jv) doFormat(input string, sortKeys bool, raw bool) error {
+func (j *Jv) doFormat(input string, sortKeys bool, raw bool) (string, error) {
 	data, err := DecodeJSON(input)
 	if err != nil {
-		return fmt.Errorf("invalid JSON: %w", err)
+		return "", fmt.Errorf("invalid JSON: %w", err)
 	}
 
 	if sortKeys {
@@ -172,16 +223,14 @@ func (j *Jv) doFormat(input string, sortKeys bool, raw bool) error {
 		}
 	}
 
-	output := FormatJSON(data, 2, !raw)
-	fmt.Println(output)
-	return nil
+	return FormatJSON(data, 2, !raw), nil
 }
 
 // doCompress minifies JSON to a single line.
-func (j *Jv) doCompress(input string, sortKeys bool, escape bool) error {
+func (j *Jv) doCompress(input string, sortKeys bool, escape bool) (string, error) {
 	data, err := DecodeJSON(input)
 	if err != nil {
-		return fmt.Errorf("invalid JSON: %w", err)
+		return "", fmt.Errorf("invalid JSON: %w", err)
 	}
 
 	if sortKeys {
@@ -190,28 +239,17 @@ func (j *Jv) doCompress(input string, sortKeys bool, escape bool) error {
 		}
 	}
 
-	output := CompactJSON(data, escape)
-	fmt.Println(output)
-	return nil
+	return CompactJSON(data, escape), nil
 }
 
-// doEscape converts non-ASCII characters to \uXXXX escapes.
-func (j *Jv) doEscape(input string) error {
+// doEscape converts non-ASCII characters to \uXXXX escapes. Input that is not
+// valid JSON is escaped as a raw string rather than treated as an error.
+func (j *Jv) doEscape(input string) (string, error) {
 	data, err := DecodeJSON(input)
 	if err != nil {
-		// If it's not valid JSON, just escape the raw string
-		fmt.Println(EscapeUnicode(input))
-		return nil
+		return EscapeUnicode(input), nil
 	}
-	output := CompactJSON(data, true)
-	fmt.Println(output)
-	return nil
-}
-
-// doUnescape converts \uXXXX sequences back to UTF-8.
-func (j *Jv) doUnescape(input string) error {
-	fmt.Println(UnescapeUnicode(input))
-	return nil
+	return CompactJSON(data, true), nil
 }
 
 // doInteractive launches the interactive viewer. Invalid JSON is not
@@ -223,49 +261,30 @@ func (j *Jv) doInteractive(input string, sortKeys bool, source string) error {
 
 // printHelp displays usage information.
 func (j *Jv) printHelp() {
-	fmt.Printf("jv - JSON Viewer & Formatter v%s\n\n", j.version)
-	fmt.Println("Usage:")
-	fmt.Println("  v jv [flags]           Read from clipboard")
-	fmt.Println("  v jv -file <path>      Read from file")
-	fmt.Println("  v jv -url <url>        Read from URL")
-	fmt.Println("  echo '{...}' | v jv    Read from pipe/stdin")
-	fmt.Println()
-	fmt.Println("Modes:")
-	fmt.Println("  (default)  Interactive tree viewer (browse, fold/unfold, copy)")
-	fmt.Println("  -f         Format (pretty-print) JSON")
-	fmt.Println("  -c         Compress (minify) JSON")
-	fmt.Println("  -e         Escape non-ASCII to \\uXXXX")
-	fmt.Println("  -u         Unescape \\uXXXX to UTF-8")
-	fmt.Println()
-	fmt.Println("Options:")
-	fmt.Println("  -sort      Sort object keys alphabetically")
-	fmt.Println("  -raw       Disable colored output (with -f)")
-	fmt.Println("  -file      Read from file path")
-	fmt.Println("  -url       Read from URL (HTTP/HTTPS)")
-	fmt.Println("  -h         Show this help")
-	fmt.Println()
-	fmt.Println("Interactive viewer keys:")
-	fmt.Println("  ↑↓ / jk    Move cursor          PgUp/PgDn  Page up/down")
-	fmt.Println("  Enter/o    Fold / unfold        h / l      Fold, jump parent / unfold")
-	fmt.Println("  e / c      Expand / collapse all")
-	fmt.Println("  i          Inline edit (Esc done, Ctrl-Z/Y undo/redo)")
-	fmt.Println("  I          Edit in $EDITOR (vim/vi/nano/notepad); returns on save")
-	fmt.Println("  f          Reformat document")
-	fmt.Println("  / or Ctrl-F  Search (Enter next, Shift-Enter prev, Alt-C/W/R case/word/regex)")
-	fmt.Println("  Tab        Filter bar: .key  [0]  [\"k\"]  .length  .map(.k)")
-	fmt.Println("  u          Toggle \\uXXXX display")
-	fmt.Println("  F / M / E  Copy formatted / minified / minified+\\uXXXX escaped JSON")
-	fmt.Println("  y / p      Copy value / path at cursor")
-	fmt.Println("  ?          Help overlay         q  Quit")
-	fmt.Println("  Mouse: wheel scrolls view, click selects, double-click edits, gutter folds")
-	fmt.Println()
-	fmt.Println("Edit mode:")
-	fmt.Println("  Shift+arrows  Select text       Ctrl-A  Select all")
-	fmt.Println("  Ctrl-C/X/V    Copy/cut/paste    Ctrl+←/->  Move by word")
-	fmt.Println("  Double-click  Select word       Drag    Select range")
-	fmt.Println("  Shift+click   Extend selection")
-	fmt.Println()
-	fmt.Println("Non-JSON input is opened as plain editable text without formatting.")
+	color.Println("<gray>--------------------------------------------------</>")
+	color.Printf("<fg=cyan;op=bold>jv - JSON Viewer & Formatter v%s</>\n\n", j.version)
+	color.Println("<fg=magenta;op=bold>Usage:</>")
+	color.Println("  v jv [flags]           Read from clipboard (default)")
+	color.Println("  v jv <green>-file</> <path>      Read from file")
+	color.Println("  echo '{...}' | v jv    Read from pipe/stdin")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Modes:</>")
+	color.Println("  (default)  Interactive tree viewer (browse, fold/unfold, copy, edit)")
+	color.Println("  <green>-f</>         Format (pretty-print) JSON")
+	color.Println("  <green>-c</>         Compress (minify) JSON")
+	color.Println("  <green>-e</>         Escape non-ASCII to \\uXXXX")
+	color.Println("  <green>-u</>         Unescape \\uXXXX to UTF-8")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Options:</>")
+	color.Println("  <green>-sort</>   Sort object keys alphabetically")
+	color.Println("  <green>-raw</>    Disable colored output (with -f)")
+	color.Println()
+	color.Println("<gray>I/O: -pipe (auto) · -file <path> · -url <url> · -clip · -out <path> · -copy · -h</>")
+	color.Println("<gray>     Priority: pipe > -file > -url > clipboard</>")
+	color.Println()
+	color.Println("<gray>Non-JSON input is opened as plain editable text.</>")
+	color.Println("<gray>Press ? inside the viewer for the full key reference.</>")
+	color.Println("<gray>--------------------------------------------------</>")
 }
 
 // expandHome expands ~ to the user's home directory.

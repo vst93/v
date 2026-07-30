@@ -25,15 +25,15 @@ type DiffViewer struct {
 	app        *tview.Application
 	bottomBar  *tview.Flex
 
-	currentIdx int    // current highlighted line index
+	currentIdx int // current highlighted line index
 	searchTerm string
-	searchHits []int  // indices of matching lines
-	searchPos  int    // current position in searchHits
+	searchHits []int // indices of matching lines
+	searchPos  int   // current position in searchHits
 
 	// cached formatted content
 	leftContent  string
 	rightContent string
-	panelWidth int // render width for full-line backgrounds (0 = not yet known)
+	panelWidth   int // render width for full-line backgrounds (0 = not yet known)
 
 	rootLayout *tview.Flex
 	onEdit     func() // invoked on 'e' to return to edit mode (nil = disabled)
@@ -248,11 +248,11 @@ const (
 // Bottom-bar styling (jv-inspired): key "pills" + dim descriptions, with
 // status segments joined by " · ".
 const (
-	colorPillBg = "#008080" // teal pill background
-	colorPillFg = "#000000" // black bold key on the pill
-	colorBarDim = "#888888" // dim descriptions / secondary status text
+	colorPillBg  = "#008080" // teal pill background
+	colorPillFg  = "#000000" // black bold key on the pill
+	colorBarDim  = "#888888" // dim descriptions / secondary status text
 	colorBarMain = "#aaaaaa" // primary status text
-	colorBarAcc = "#ffaa00"  // accent (search)
+	colorBarAcc  = "#ffaa00" // accent (search)
 )
 
 // helpItem pairs a key (shown as a pill) with a short description.
