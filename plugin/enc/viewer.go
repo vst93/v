@@ -9,63 +9,109 @@ import (
 	"github.com/rivo/tview"
 )
 
-// codecMode pairs a display label with the internal transform mode.
-type codecMode struct {
+// codecType is a top-level encoding type (left column).
+type codecType struct {
 	label string
-	mode  string
+	key   rune // quick-select key (lowercase)
 }
 
-// All encode/decode modes for the TUI selector.
-var codecModes = []codecMode{
-	{"Base64 Enc", "base64enc"},
-	{"Base64 Dec", "base64dec"},
-	{"Base32 Enc", "base32enc"},
-	{"Base32 Dec", "base32dec"},
-	{"URL Enc", "urlenc"},
-	{"URL Dec", "urldec"},
-	{"Hex Enc", "hexenc"},
-	{"Hex Dec", "hexdec"},
-	{"HTML Esc", "htmlesc"},
-	{"HTML Unesc", "htmlunesc"},
-	{"Unicode Esc", "unienc"},
-	{"Unicode Unesc", "unidec"},
+// All encoding types for the left column.
+var codecTypes = []codecType{
+	{"Base64", 'b'},
+	{"Base32", 'a'},
+	{"URL", 'u'},
+	{"Hex", 'h'},
+	{"HTML", 'm'},
+	{"Unicode", 'n'},
 }
 
-// focus areas
+// direction: 0 = encode, 1 = decode (default decode)
 const (
-	focusMode  = 0
-	focusInput = 1
-	focusOut   = 2
+	dirEncode = 0
+	dirDecode = 1
 )
+
+// modeFromType builds the internal mode string from a type index + direction.
+func modeFromType(typeIdx, dir int) string {
+	switch typeIdx {
+	case 0: // Base64
+		if dir == dirDecode {
+			return "base64dec"
+		}
+		return "base64enc"
+	case 1: // Base32
+		if dir == dirDecode {
+			return "base32dec"
+		}
+		return "base32enc"
+	case 2: // URL
+		if dir == dirDecode {
+			return "urldec"
+		}
+		return "urlenc"
+	case 3: // Hex
+		if dir == dirDecode {
+			return "hexdec"
+		}
+		return "hexenc"
+	case 4: // HTML
+		if dir == dirDecode {
+			return "htmlunesc"
+		}
+		return "htmlesc"
+	case 5: // Unicode
+		if dir == dirDecode {
+			return "unidec"
+		}
+		return "unienc"
+	}
+	return "base64enc"
+}
 
 // encTUI holds the interactive encoder TUI state.
 type encTUI struct {
 	app        *tview.Application
-	modeIdx    int
-	focus      int
+	typeIdx    int   // selected codec type (left column)
+	dir        int   // 0=encode, 1=decode (right column, default decode)
+	focus      int   // which panel is focused
 	inputArea  *tview.TextView
 	outputArea *tview.TextView
-	modeBar    *tview.TextView
+	typeList   *tview.TextView
+	dirList    *tview.TextView
 	statusBar  *tview.TextView
 	inputText  string
 	outputText string
 	cursorPos  int // cursor position in inputText (byte offset)
 }
 
+// focus areas
+const (
+	focusType  = 0
+	focusDir   = 1
+	focusInput = 2
+	focusOut   = 3
+)
+
 func runTUI() error {
 	ui := &encTUI{
-		modeIdx: 0,
+		typeIdx: 0,
+		dir:     dirDecode, // default decode
 		focus:   focusInput,
 	}
 
 	ui.app = tview.NewApplication()
 
-	// --- Mode selector bar ---
-	ui.modeBar = tview.NewTextView().
+	// --- Left column: codec type selector ---
+	ui.typeList = tview.NewTextView().
 		SetDynamicColors(true).
-		SetWrap(false).
-		SetTextAlign(tview.AlignCenter)
-	ui.modeBar.SetBorder(true).SetTitle(" Codec ").SetTitleAlign(tview.AlignCenter)
+		SetWrap(false)
+	ui.typeList.SetBorder(true).SetTitle(" Codec ").SetTitleAlign(tview.AlignCenter)
+
+	// --- Right column: encode/decode selector ---
+	ui.dirList = tview.NewTextView().
+		SetDynamicColors(true).
+		SetWrap(false)
+	ui.dirList.SetBorder(true).SetTitle(" Mode ").SetTitleAlign(tview.AlignCenter)
 
 	// --- Input area ---
 	ui.inputArea = tview.NewTextView().
@@ -84,37 +130,45 @@ func runTUI() error {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 
-	// --- Layout ---
+	// --- Selector row: two columns side by side ---
+	selectorRow := tview.NewFlex().
+		AddItem(ui.typeList, 14, 0, false).
+		AddItem(ui.dirList, 12, 0, false)
+
+	// --- Main layout ---
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(ui.modeBar, 3, 0, false).
+		AddItem(selectorRow, 8, 0, false).
 		AddItem(ui.inputArea, 0, 1, true).
 		AddItem(ui.outputArea, 0, 1, false).
 		AddItem(ui.statusBar, 1, 0, false)
 
-	ui.refreshModeBar()
+	ui.refreshTypeList()
+	ui.refreshDirList()
 	ui.refreshInput()
 	ui.refreshOutput()
 	ui.refreshAreas()
 	ui.refreshStatus()
 
 	ui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		// Tab / Shift+Tab: cycle focus
+		// Tab / Shift+Tab: cycle focus (4 areas)
 		if event.Key() == tcell.KeyTab {
-			ui.focus = (ui.focus + 1) % 3
+			ui.focus = (ui.focus + 1) % 4
 			ui.refreshAreas()
 			ui.refreshStatus()
 			return nil
 		}
 		if event.Key() == tcell.KeyBacktab {
-			ui.focus = (ui.focus - 1 + 3) % 3
+			ui.focus = (ui.focus - 1 + 4) % 4
 			ui.refreshAreas()
 			ui.refreshStatus()
 			return nil
 		}
 
 		switch ui.focus {
-		case focusMode:
-			return ui.handleModeInput(event)
+		case focusType:
+			return ui.handleTypeInput(event)
+		case focusDir:
+			return ui.handleDirInput(event)
 		case focusInput:
 			return ui.handleInputEdit(event)
 		case focusOut:
@@ -129,28 +183,23 @@ func runTUI() error {
 	return nil
 }
 
-// handleModeInput handles keys when the mode selector is focused.
-func (ui *encTUI) handleModeInput(event *tcell.EventKey) *tcell.EventKey {
+// handleTypeInput handles keys when the codec type list is focused.
+func (ui *encTUI) handleTypeInput(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
-	case tcell.KeyLeft:
-		ui.modeIdx = (ui.modeIdx - 1 + len(codecModes)) % len(codecModes)
-		ui.refreshModeBar()
-		ui.doTransform()
-		return nil
-	case tcell.KeyRight:
-		ui.modeIdx = (ui.modeIdx + 1) % len(codecModes)
-		ui.refreshModeBar()
-		ui.doTransform()
-		return nil
 	case tcell.KeyUp:
-		ui.modeIdx = (ui.modeIdx - 1 + len(codecModes)) % len(codecModes)
-		ui.refreshModeBar()
+		ui.typeIdx = (ui.typeIdx - 1 + len(codecTypes)) % len(codecTypes)
+		ui.refreshTypeList()
 		ui.doTransform()
 		return nil
 	case tcell.KeyDown:
-		ui.modeIdx = (ui.modeIdx + 1) % len(codecModes)
-		ui.refreshModeBar()
+		ui.typeIdx = (ui.typeIdx + 1) % len(codecTypes)
+		ui.refreshTypeList()
 		ui.doTransform()
+		return nil
+	case tcell.KeyLeft, tcell.KeyRight:
+		ui.focus = focusDir
+		ui.refreshAreas()
+		ui.refreshStatus()
 		return nil
 	case tcell.KeyEnter:
 		ui.focus = focusInput
@@ -162,15 +211,67 @@ func (ui *encTUI) handleModeInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case tcell.KeyRune:
 		ch := event.Rune()
-		// Number keys 1-9 quick select
-		if ch >= '1' && ch <= '9' {
-			idx := int(ch - '1')
-			if idx < len(codecModes) {
-				ui.modeIdx = idx
-				ui.refreshModeBar()
+		lower := ch
+		if ch >= 'A' && ch <= 'Z' {
+			lower = ch + 32
+		}
+		// Quick-select by letter key
+		for i, t := range codecTypes {
+			if t.key == lower {
+				ui.typeIdx = i
+				ui.refreshTypeList()
 				ui.doTransform()
 				return nil
 			}
+		}
+	}
+	return event
+}
+
+// handleDirInput handles keys when the encode/decode list is focused.
+func (ui *encTUI) handleDirInput(event *tcell.EventKey) *tcell.EventKey {
+	switch event.Key() {
+	case tcell.KeyUp:
+		ui.dir = (ui.dir - 1 + 2) % 2
+		ui.refreshDirList()
+		ui.doTransform()
+		return nil
+	case tcell.KeyDown:
+		ui.dir = (ui.dir + 1) % 2
+		ui.refreshDirList()
+		ui.doTransform()
+		return nil
+	case tcell.KeyLeft, tcell.KeyRight:
+		ui.focus = focusType
+		ui.refreshAreas()
+		ui.refreshStatus()
+		return nil
+	case tcell.KeyEnter:
+		ui.focus = focusInput
+		ui.refreshAreas()
+		ui.refreshStatus()
+		return nil
+	case tcell.KeyEscape:
+		ui.app.Stop()
+		return nil
+	case tcell.KeyRune:
+		ch := event.Rune()
+		lower := ch
+		if ch >= 'A' && ch <= 'Z' {
+			lower = ch + 32
+		}
+		// e = encode, d = decode
+		if lower == 'e' {
+			ui.dir = dirEncode
+			ui.refreshDirList()
+			ui.doTransform()
+			return nil
+		}
+		if lower == 'd' {
+			ui.dir = dirDecode
+			ui.refreshDirList()
+			ui.doTransform()
+			return nil
 		}
 	}
 	return event
@@ -187,7 +288,6 @@ func (ui *encTUI) handleInputEdit(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
 		if ui.cursorPos > 0 {
-			// Find start of previous rune
 			pos := ui.cursorPos
 			for pos > 0 && (ui.inputText[pos-1] & 0xC0) == 0x80 {
 				pos--
@@ -268,13 +368,14 @@ func (ui *encTUI) handleInputEdit(event *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case tcell.KeyCtrlR:
-		// Reverse: swap input/output, switch to reverse mode
+		// Reverse: swap input/output, switch direction
 		if ui.outputText != "" {
 			ui.inputText = ui.outputText
 			ui.outputText = ""
 			ui.cursorPos = len(ui.inputText)
-			ui.modeIdx = ui.reverseModeIdx()
-			ui.refreshModeBar()
+			// Toggle direction
+			ui.dir = 1 - ui.dir
+			ui.refreshDirList()
 			ui.refreshInput()
 			ui.doTransform()
 		}
@@ -293,7 +394,6 @@ func (ui *encTUI) handleOutputView(event *tcell.EventKey) *tcell.EventKey {
 		ui.app.Stop()
 		return nil
 	case tcell.KeyEnter:
-		// Copy to clipboard
 		if ui.outputText != "" {
 			_ = clipboard.WriteAll(ui.outputText)
 			ui.statusBar.SetText("[green]✅ Copied to clipboard[-:-]")
@@ -309,7 +409,6 @@ func (ui *encTUI) handleOutputView(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 	}
-	// Let arrow keys scroll the output
 	return event
 }
 
@@ -329,7 +428,8 @@ func (ui *encTUI) doTransform() {
 		ui.refreshStatus()
 		return
 	}
-	result, err := doTransform(codecModes[ui.modeIdx].mode, ui.inputText)
+	mode := modeFromType(ui.typeIdx, ui.dir)
+	result, err := doTransform(mode, ui.inputText)
 	if err != nil {
 		ui.outputText = ""
 		ui.refreshOutput()
@@ -341,139 +441,44 @@ func (ui *encTUI) doTransform() {
 	ui.refreshStatus()
 }
 
-// reverseModeIdx returns the index of the reverse encode/decode mode.
-func (ui *encTUI) reverseModeIdx() int {
-	if ui.modeIdx%2 == 0 {
-		return ui.modeIdx + 1
+// refreshTypeList renders the codec type list (left column).
+func (ui *encTUI) refreshTypeList() {
+	var sb strings.Builder
+	for i, t := range codecTypes {
+		if i == ui.typeIdx {
+			sb.WriteString(fmt.Sprintf("[black:green:b] %s (%s) [-:-:-]", t.label, string(t.key)))
+		} else {
+			sb.WriteString(fmt.Sprintf("[::d] %s (%s) [-:-:-]", t.label, string(t.key)))
+		}
+		if i < len(codecTypes)-1 {
+			sb.WriteString("\n")
+		}
 	}
-	return ui.modeIdx - 1
+	ui.typeList.SetText(sb.String())
 }
 
-// refreshModeBar renders the mode selector with a sliding window so that
-// the active mode is always visible even on narrow terminals.
-func (ui *encTUI) refreshModeBar() {
-	// Determine available inner width
-	_, _, width, _ := ui.modeBar.GetInnerRect()
-	if width <= 0 {
-		width = 80
-	}
-
-	// Each item renders as " Label " = label + 2 spaces. Separator is 1 space.
-	// Reserve 3 chars for "‹ " / " ›" indicators if needed.
-	itemW := func(idx int) int { return len(codecModes[idx].label) + 2 }
-
-	// Total width if all items shown
-	totalW := 0
-	for i := range codecModes {
-		totalW += itemW(i)
-	}
-	totalW += len(codecModes) - 1 // separators
-
-	// If everything fits, show all (no indicators)
-	if totalW <= width {
-		var sb strings.Builder
-		sb.WriteString(" ")
-		for i, m := range codecModes {
-			if i == ui.modeIdx {
-				sb.WriteString(fmt.Sprintf("[black:green:b] %s [-:-:-]", m.label))
-			} else {
-				sb.WriteString(fmt.Sprintf("[::d] %s [-:-:-]", m.label))
-			}
-			if i < len(codecModes)-1 {
-				sb.WriteString(" ")
-			}
-		}
-		sb.WriteString(" ")
-		ui.modeBar.SetText(sb.String())
-		return
-	}
-
-	// Doesn't all fit — build a window around the current selection.
-	// Reserve space for indicators (2 chars each side: "‹ " and " ›")
-	availW := width - 4 // reserve for both indicators
-
-	// Start with just the center item
-	left := ui.modeIdx
-	right := ui.modeIdx
-	usedW := itemW(ui.modeIdx)
-
-	for {
-		expanded := false
-		// Try left
-		nl := (left - 1 + len(codecModes)) % len(codecModes)
-		if nl != right {
-			w := itemW(nl) + 1
-			if usedW+w <= availW {
-				left = nl
-				usedW += w
-				expanded = true
-			}
-		}
-		// Try right
-		nr := (right + 1) % len(codecModes)
-		if nr != left {
-			w := itemW(nr) + 1
-			if usedW+w <= availW {
-				right = nr
-				usedW += w
-				expanded = true
-			}
-		}
-		if !expanded {
-			break
-		}
-	}
-
-	// Check if left/right edges wrap (meaning all items on that side are shown)
-	// left edge: item before 'left' in circular order
-	// right edge: item after 'right' in circular order
-	// If window covers all items, no indicators needed
-	windowCount := 1
-	if right != left {
-		i := left
-		for i != right {
-			i = (i + 1) % len(codecModes)
-			windowCount++
-		}
-	}
-	showLeft := windowCount < len(codecModes)
-	showRight := windowCount < len(codecModes)
-	// If wrapping (left > right in linear terms), indicators may overlap
-	// But with limited width, wrapping means all fit, which we already handled above.
-
+// refreshDirList renders the encode/decode list (right column).
+func (ui *encTUI) refreshDirList() {
 	var sb strings.Builder
-	if showLeft {
-		sb.WriteString("[yellow]‹[-:-] ")
+	encodeLabel := " Encode (e)"
+	decodeLabel := " Decode (d)"
+	if ui.dir == dirEncode {
+		sb.WriteString(fmt.Sprintf("[black:green:b]%s[-:-:-]", encodeLabel))
+	} else {
+		sb.WriteString(fmt.Sprintf("[::d]%s[-:-:-]", encodeLabel))
 	}
-	sb.WriteString(" ")
-	i := left
-	first := true
-	for {
-		if !first {
-			sb.WriteString(" ")
-		}
-		first = false
-		if i == ui.modeIdx {
-			sb.WriteString(fmt.Sprintf("[black:green:b] %s [-:-:-]", codecModes[i].label))
-		} else {
-			sb.WriteString(fmt.Sprintf("[::d] %s [-:-:-]", codecModes[i].label))
-		}
-		if i == right {
-			break
-		}
-		i = (i + 1) % len(codecModes)
+	sb.WriteString("\n")
+	if ui.dir == dirDecode {
+		sb.WriteString(fmt.Sprintf("[black:green:b]%s[-:-:-]", decodeLabel))
+	} else {
+		sb.WriteString(fmt.Sprintf("[::d]%s[-:-:-]", decodeLabel))
 	}
-	sb.WriteString(" ")
-	if showRight {
-		sb.WriteString(" [yellow]›[-:-]")
-	}
-	ui.modeBar.SetText(sb.String())
+	ui.dirList.SetText(sb.String())
 }
 
 // refreshInput renders the input text with cursor.
 func (ui *encTUI) refreshInput() {
 	if ui.focus == focusInput {
-		// Show cursor
 		before := tview.Escape(ui.inputText[:ui.cursorPos])
 		ch := " "
 		after := ""
@@ -499,12 +504,15 @@ func (ui *encTUI) refreshOutput() {
 // refreshAreas updates border colors to show focus.
 func (ui *encTUI) refreshAreas() {
 	accent := tcell.Color42
-	ui.modeBar.SetBorderColor(tcell.ColorDefault)
+	ui.typeList.SetBorderColor(tcell.ColorDefault)
+	ui.dirList.SetBorderColor(tcell.ColorDefault)
 	ui.inputArea.SetBorderColor(tcell.ColorDefault)
 	ui.outputArea.SetBorderColor(tcell.ColorDefault)
 	switch ui.focus {
-	case focusMode:
-		ui.modeBar.SetBorderColor(accent)
+	case focusType:
+		ui.typeList.SetBorderColor(accent)
+	case focusDir:
+		ui.dirList.SetBorderColor(accent)
 	case focusInput:
 		ui.inputArea.SetBorderColor(accent)
 	case focusOut:
@@ -514,11 +522,18 @@ func (ui *encTUI) refreshAreas() {
 
 // refreshStatus updates the status bar with current state and keybindings.
 func (ui *encTUI) refreshStatus() {
+	modeLabel := "Encode"
+	if ui.dir == dirDecode {
+		modeLabel = "Decode"
+	}
+	typeLabel := codecTypes[ui.typeIdx].label
 	if ui.outputText != "" {
 		ui.statusBar.SetText(fmt.Sprintf(
-			"[yellow]Tab[-] Next  [yellow]←→[-] Switch Codec  [yellow]Enter[-] Copy/Edit  [yellow]Ctrl-R[-] Reverse  [yellow]Ctrl-L[-] Clear  [yellow]Esc[-] Quit  [::d]%d→%d[-:-]",
-			len(ui.inputText), len(ui.outputText)))
+			"[yellow]Tab[-] Next  [yellow]↑↓[-] Select  [yellow]Enter[-] Copy/Edit  [yellow]Ctrl-R[-] Reverse  [yellow]Ctrl-L[-] Clear  [yellow]Esc[-] Quit  [::d]%s %s %d→%d[-:-]",
+			typeLabel, modeLabel, len(ui.inputText), len(ui.outputText)))
 	} else {
-		ui.statusBar.SetText("[yellow]Tab[-] Next  [yellow]←→[-] Switch Codec  [yellow]Enter[-] Edit Input  [yellow]Ctrl-V[-] Paste  [yellow]Ctrl-L[-] Clear  [yellow]Esc[-] Quit")
+		ui.statusBar.SetText(fmt.Sprintf(
+			"[yellow]Tab[-] Next  [yellow]↑↓[-] Select  [yellow]Enter[-] Edit Input  [yellow]Ctrl-V[-] Paste  [yellow]Ctrl-L[-] Clear  [yellow]Esc[-] Quit  [::d]%s %s[-:-]",
+			typeLabel, modeLabel))
 	}
 }
