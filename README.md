@@ -448,7 +448,8 @@ column moves above the editor so nothing gets clipped.
 ### gencm - Generate Commit Message
 
 Generate a Conventional Commits message from your git changes using an
-OpenAI-compatible AI model.
+OpenAI-compatible AI model. Handles large changesets (dozens or hundreds
+of files) by condensing diffs per-file while preserving structure.
 
 **Short command:** `gc` (alias for `gencm`)
 
@@ -473,6 +474,12 @@ $ v gencm -a
 
 # Generate for a project in another directory
 $ v gencm -C ~/projects/myapp
+# (or just pass the directory as a positional argument)
+$ v gencm ~/projects/myapp -a
+
+# Generate in Chinese / English (one-shot, does not change saved config)
+$ v gencm -zh
+$ v gencm -en
 
 # Read the diff from a pipe instead of running git
 $ git diff --cached | v gencm
@@ -486,12 +493,17 @@ $ git diff --cached | v gencm
 | `-u` | Use unstaged changes (`git diff`) |
 | `-a` | Use all changes vs HEAD (`git diff HEAD`) |
 | `-C <path>` | Run as if git was started in `<path>` (default: current directory) |
+| `<path>` | Shorthand: a bare directory path is treated as `-C <path>` |
 | `-lang` | Commit message language: `en`, `zh`, or custom text (default: `en`) |
+| `-en` | Generate in English (one-shot, does not change saved config) |
+| `-zh` | Generate in Chinese (one-shot, does not change saved config) |
 | `-pipe` | Read diff from stdin/pipe instead of running git (auto-detected) |
 | `-copy` | Copy to clipboard (skips interactive menu in non-pipe mode) |
 | `-h` | Show help |
 
-**Configuration** — add a `[gcm]` section to `~/.v_tools/settings.ini`:
+All flags are independent and can appear in any order.
+
+**Configuration** - add a `[gcm]` section to `~/.v_tools/settings.ini`:
 
 ```ini
 [gcm]
@@ -507,7 +519,8 @@ condensed per-file before the API call to stay within the model's token
 limit. Large changesets preserve file-level structure: every file's
 header and hunk headers survive, only verbose content within each file
 is trimmed. A `git diff --stat` summary is always included so the model
-sees the full scope even when the diff is condensed.
+sees the full scope even when the diff is condensed. Transient API
+failures (empty response, timeout, 5xx) are retried automatically.
 
 **Commit message language** - `lang` controls the output language:
 
@@ -517,12 +530,15 @@ sees the full scope even when the diff is condensed.
 | `zh` | Chinese |
 | (any text) | Custom instruction, e.g. `Write in Japanese` |
 
-On first run in interactive mode, you'll be prompted to pick. Override at
-any time with `-lang`:
+On first run in interactive mode, you'll be prompted to pick. Re-run the
+setup at any time with a bare `-lang`:
 
 ```bash
-$ v gencm -lang zh        # Chinese
-$ v gencm -lang "Write in Japanese"
+$ v gencm -lang              # Show current language and re-run setup
+$ v gencm -lang zh           # Set to Chinese (persists to config)
+$ v gencm -lang "Write in Japanese"  # Custom instruction
+$ v gencm -zh                # One-shot Chinese (does not save config)
+$ v gencm -en                # One-shot English (does not save config)
 ```
 
 **Interactive menu** (non-pipe mode only): after generating a commit message,
@@ -535,7 +551,7 @@ choose an action:
 | `3` | Commit and push |
 | `4` | Do nothing |
 
-Pipe mode and the `-copy` flag skip the menu — they just print the message
+Pipe mode and the `-copy` flag skip the menu - they just print the message
 (or print + copy).
 
 ## Development

@@ -22,7 +22,7 @@ func TestActionMenuCopy(t *testing.T) {
 	os.Stdin = r
 
 	g := &Gcm{}
-	_ = g.actionMenu("feat: test message", "")
+	_ = g.actionMenu("feat: test message", "", "staged", false)
 	// No error check: clipboard may fail in headless CI.
 	// The test verifies the code path doesn't panic.
 }
@@ -38,7 +38,7 @@ func TestActionMenuDoNothing(t *testing.T) {
 	os.Stdin = r
 
 	g := &Gcm{}
-	err := g.actionMenu("feat: test message", "")
+	err := g.actionMenu("feat: test message", "", "staged", false)
 	if err != nil {
 		t.Fatalf("actionMenu returned error: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestActionMenuUnknown(t *testing.T) {
 	os.Stdin = r
 
 	g := &Gcm{}
-	err := g.actionMenu("feat: test message", "")
+	err := g.actionMenu("feat: test message", "", "staged", false)
 	if err != nil {
 		t.Fatalf("actionMenu returned error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestActionMenuOutput(t *testing.T) {
 	defer func() { os.Stdout = oldStdout }()
 
 	g := &Gcm{}
-	_ = g.actionMenu("feat: test message", "")
+	_ = g.actionMenu("feat: test message", "", "staged", false)
 
 	wOut.Close()
 	out, _ := io.ReadAll(rOut)

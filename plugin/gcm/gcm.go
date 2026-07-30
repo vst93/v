@@ -254,11 +254,11 @@ func (g *Gcm) Run(args []string) error {
 	}
 
 	// Interactive action menu
-	return g.actionMenu(message, dir)
+	return g.actionMenu(message, dir, source, stageAll)
 }
 
 // actionMenu shows an interactive menu after generating a commit message.
-func (g *Gcm) actionMenu(message, dir string) error {
+func (g *Gcm) actionMenu(message, dir, source string, stageAll bool) error {
 	fmt.Println("\n─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─")
 	fmt.Println("📦 What would you like to do?")
 	fmt.Println()
@@ -284,11 +284,21 @@ func (g *Gcm) actionMenu(message, dir string) error {
 		}
 		fmt.Println("✅ Copied to clipboard")
 	case "2":
+		if source == sourceUnstaged || source == sourceAll {
+			if err := runGitAddAll(dir); err != nil {
+				return err
+			}
+		}
 		if err := gitCommit(message, dir); err != nil {
 			return err
 		}
 		fmt.Println("✅ Committed")
 	case "3":
+		if source == sourceUnstaged || source == sourceAll {
+			if err := runGitAddAll(dir); err != nil {
+				return err
+			}
+		}
 		if err := gitCommit(message, dir); err != nil {
 			return err
 		}
