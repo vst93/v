@@ -445,6 +445,56 @@ Conversion is live — the output updates as you type. Decode errors appear in t
 output box instead of clearing it silently. Below 64 columns the Codec/Mode
 column moves above the editor so nothing gets clipped.
 
+### vc - v-connection
+
+Multi-device text sharing via a channel. Create a channel, share the
+link/QR code/short code, and exchange text in real time between CLI and
+browser.
+
+```bash
+# Create a new channel (default) - shows link, QR code, and short code
+$ v vc
+
+# Create with auto-copy: received text is copied to clipboard
+$ v vc -copy
+
+# Join a channel with a 4-char short code
+$ v vc -join ab12
+
+# Join (prompted for code)
+$ v vc -join
+
+# Use a custom server
+$ v vc -host https://my-server.com
+
+# Pipe mode: send text without interactive session
+$ echo "hello from CLI" | v vc -join ab12
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-new` | Create a random channel (default) |
+| `-join` | Join a channel (optionally pass code as argument) |
+| `-copy` | Auto-copy received text to clipboard |
+| `-host` | Custom server host (default: `https://meimingzi.top`) |
+| `-h` | Show help |
+
+**Interactive commands (during session):**
+
+| Command | Action |
+|---------|--------|
+| `~help` | Show available commands |
+| `~refresh` | Poll for new messages now |
+| `~code` | Show the short code again |
+| `~url` | Show link + QR code again |
+| `~quit` | Exit session |
+
+QR code display requires `qrencode` installed. Clipboard auto-copy uses
+the system clipboard (xclip/wl-clipboard/pbcopy). Empty line or Ctrl-C
+exits the session.
+
 ### gencm - Generate Commit Message
 
 Generate a Conventional Commits message from your git changes using an
@@ -577,6 +627,7 @@ v/
 │   ├── diff/            # Side-by-side diff viewer
 │   ├── cp/              # Copy to clipboard (pipe-friendly)
 │   ├── codec/           # Encode/Decode utility (base64, url, hex, html, unicode)
+│   ├── vc/              # v-connection: multi-device text sharing
 │   └── gcm/             # AI commit message generator (command: gencm)
 └── setting/
     └── ini.go           # Configuration management

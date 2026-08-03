@@ -11,6 +11,7 @@ import (
 	plugin_pwd "v/plugin/pwd"
 	plugin_translate "v/plugin/translate"
 	plugin_tt "v/plugin/tt"
+	plugin_vc "v/plugin/vc"
 )
 
 type PluginTemplate interface {
@@ -71,6 +72,7 @@ func (p Plugin) List() []PluginTemplate {
 		&(plugin_pwd.Pwd{}),
 		&(plugin_tt.TT{}),
 		&(plugin_translate.Tr{}),
+		&(plugin_vc.Vc{}),
 	}
 	for _, v := range list {
 		v.Init()
