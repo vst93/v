@@ -9,6 +9,7 @@ require (
 	github.com/gookit/ini/v2 v2.3.2
 	github.com/rivo/tview v0.42.0
 	github.com/rivo/uniseg v0.4.7
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/xuri/excelize/v2 v2.10.0
 	golang.org/x/text v0.31.0
 )

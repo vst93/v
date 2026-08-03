@@ -491,9 +491,9 @@ $ echo "hello from CLI" | v vc -join ab12
 | `~url` | Show link + QR code again |
 | `~quit` | Exit session |
 
-QR code display requires `qrencode` installed. Clipboard auto-copy uses
-the system clipboard (xclip/wl-clipboard/pbcopy). Empty line or Ctrl-C
-exits the session.
+QR code is rendered natively in the terminal (no external dependencies).
+Clipboard auto-copy uses the system clipboard (xclip/wl-clipboard/pbcopy).
+Empty line or Ctrl-C exits the session.
 
 ### gencm - Generate Commit Message
 
