@@ -30,7 +30,7 @@ var (
 	stPunct  = tcell.StyleDefault
 
 	stGutter     = tcell.StyleDefault.Foreground(tcell.ColorGray)
-	stCurLineBg  = tcell.ColorGray
+	stCurLineBg  = tcell.ColorSilver
 	stCurGutter  = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(stCurLineBg).Bold(true)
 	stFoldPill   = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorGray)
 	stMatch      = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorYellow)
@@ -563,7 +563,8 @@ func (v *Viewer) drawLine(s tcell.Screen, x, row, width, full int, isCur bool) {
 		gutStyle = stCurGutter
 	}
 	folded := ln.kind == kindOpen && v.folded[full]
-	if ln.kind == kindOpen {
+	// In edit mode folding is disabled, so no fold indicators are drawn.
+	if ln.kind == kindOpen && !v.editing {
 		chev := '▾'
 		if folded {
 			chev = '▸'
@@ -646,7 +647,7 @@ func (v *Viewer) drawLine(s tcell.Screen, x, row, width, full int, isCur bool) {
 		}
 	}
 
-	// Folded container: placeholder pill + closing bracket.
+	// Folded container: placeholder pill + closing bracket (+ comma).
 	if folded {
 		for _, r := range " … " {
 			drawRune(r, stFoldPill)
@@ -655,8 +656,12 @@ func (v *Viewer) drawLine(s tcell.Screen, x, row, width, full int, isCur bool) {
 		if isCur {
 			st = st.Background(stCurLineBg)
 		}
-		for _, r := range v.containers[ln.openID].closeText {
+		c := &v.containers[ln.openID]
+		for _, r := range c.closeText {
 			drawRune(r, st)
+		}
+		if c.closeComma {
+			drawRune(',', st)
 		}
 	}
 }
@@ -1192,6 +1197,14 @@ func (v *Viewer) enterEdit(col int) {
 	if v.filtered {
 		v.setToast("clear the filter before editing")
 		return
+	}
+	// Folding is incompatible with editing: collapsed ranges hide real
+	// text and the fold placeholder is not part of the document. Unfold
+	// everything so edit lines map 1:1 onto the visible buffer. Fold
+	// indicators are also omitted while editing (see drawLine).
+	if len(v.folded) > 0 {
+		v.folded = make(map[int]bool)
+		v.rebuildVisible()
 	}
 	v.editing = true
 	v.clearSelection()
@@ -1895,6 +1908,9 @@ func (v *Viewer) editExternal() {
 	if !v.filtered {
 		v.rootLines = append([]string(nil), v.textLines...)
 	}
+	// The document was replaced wholesale, so fold state keyed by old
+	// line numbers is stale and must be dropped.
+	v.folded = make(map[int]bool)
 	v.reparse()
 	v.rebuildFromText()
 	if v.errLine > 0 {
@@ -1960,6 +1976,9 @@ func (v *Viewer) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(
 			v.hscroll += v.wheelStep() * 4
 			return true, v
 		case tview.MouseLeftDoubleClick:
+			if v.searchOpen && v.panelRect.contains(mx, my) {
+				return true, v // double-click on the search panel, not a node
+			}
 			if my >= y && my < y+v.editorH && mx >= x+v.gutterW && mx < x+w-1 {
 				idx := v.scroll + (my - y)
 				if idx < len(v.visible) {
@@ -2453,6 +2472,9 @@ func (v *Viewer) applyFilter() {
 		if v.filtered {
 			v.textLines = v.rootLines
 			v.filtered = false
+			// Fold keys reference lines of the filtered document, which no
+			// longer exist; drop them for the restored document.
+			v.folded = make(map[int]bool)
 			v.reparse()
 			v.rebuildFromText()
 			v.setToast("Filter cleared")
@@ -2477,6 +2499,9 @@ func (v *Viewer) applyFilter() {
 	v.textLines = splitLines(FormatJSONEscape(res, 2, v.escape))
 	v.filtered = true
 	v.errLine, v.errMsg = 0, ""
+	// Fold keys reference the unfiltered document; drop them so no stale
+	// range is collapsed in the filtered view.
+	v.folded = make(map[int]bool)
 	v.rebuildFromText()
 	summary := TypeString(res)
 	if n := CountChildren(res); n > 0 {

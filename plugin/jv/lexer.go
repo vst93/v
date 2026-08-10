@@ -51,9 +51,10 @@ type displayLine struct {
 
 // containerInfo records the line range of a foldable container.
 type containerInfo struct {
-	openLine  int
-	closeLine int    // -1 while unclosed
-	closeText string // closing bracket (+ optional comma) shown after the fold placeholder
+	openLine   int    // opening line of the container
+	closeLine  int    // -1 while unclosed
+	closeText  string // closing bracket shown after the fold placeholder
+	closeComma bool   // closing bracket is followed by ',' on the same line
 }
 
 // Object parsing modes for the lexer frame stack.
@@ -153,7 +154,7 @@ func (lx *lexer) openContainer(bracket rune, path string, line int) int {
 
 // closeContainer pops the innermost container and records its fold
 // range. Returns the frame id and its JSON path.
-func (lx *lexer) closeContainer(line int, closeText string) (int, string) {
+func (lx *lexer) closeContainer(line int, closeText string, hasComma bool) (int, string) {
 	if len(lx.stack) == 0 {
 		return -1, ""
 	}
@@ -162,6 +163,7 @@ func (lx *lexer) closeContainer(line int, closeText string) (int, string) {
 	c := &lx.containers[frame.id]
 	c.closeLine = line
 	c.closeText = closeText
+	c.closeComma = hasComma
 	return frame.id, frame.path
 }
 
@@ -274,16 +276,19 @@ func (lx *lexer) lexLine(lineNo int, text string, inString *bool) {
 			j++
 
 		case r == '}' || r == ']':
-			closeText := string(r)
+			// A comma immediately following the closing bracket is part of
+			// this container's close text (it is shown after the fold
+			// placeholder), but it must not be consumed here: the scan loop
+			// below still has to emit it once as a regular comma so the
+			// rendered line keeps exactly one comma and any whitespace
+			// between the bracket and the comma stays in place.
 			k := j + 1
 			for k < len(rs) && rs[k] == ' ' {
 				k++
 			}
-			if k < len(rs) && rs[k] == ',' {
-				closeText += ","
-			}
-			appendSeg(closeText, clsPunct)
-			if _, cpath := lx.closeContainer(lineNo, closeText); cpath != "" {
+			hasComma := k < len(rs) && rs[k] == ','
+			appendSeg(string(r), clsPunct)
+			if _, cpath := lx.closeContainer(lineNo, string(r), hasComma); cpath != "" {
 				setPath(cpath)
 			}
 			j++

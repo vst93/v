@@ -65,6 +65,57 @@ func TestLexDocument(t *testing.T) {
 	}
 }
 
+// TestLexNoDuplicateCommas guards against the lexer emitting a comma
+// twice: a comma following a closing bracket is part of the container's
+// close text (for the fold placeholder) but must still be rendered only
+// once on the closing line.
+func TestLexNoDuplicateCommas(t *testing.T) {
+	cases := []string{
+		`  },`,
+		`  "a": 1},`,
+		`[1,2],`,
+		`{"a":1,"b":[1,2],"c":3}`,
+		`  ]],`,
+		`  }  ,`, // whitespace between bracket and comma stays in place
+	}
+	for _, in := range cases {
+		lines, _ := lexDocument(splitLines(in))
+		var sb strings.Builder
+		for _, sg := range lines[0].segs {
+			sb.WriteString(sg.text)
+		}
+		if got := sb.String(); got != in {
+			t.Errorf("segments for %q = %q, want the input unchanged", in, got)
+		}
+	}
+}
+
+// TestCloseCommaTracked verifies the trailing-comma flag is recorded on
+// the container so the folded placeholder can show the comma.
+func TestCloseCommaTracked(t *testing.T) {
+	lines, containers := lexDocument(splitLines(`{
+  "a": [1, 2],
+  "b": 2
+}`))
+	if len(containers) != 2 {
+		t.Fatalf("containers = %d, want 2", len(containers))
+	}
+	arr := containers[1] // the [1, 2] array
+	if !arr.closeComma {
+		t.Error("array close should be flagged as followed by a comma")
+	}
+	if arr.closeText != "]" {
+		t.Errorf("array closeText = %q, want %q", arr.closeText, "]")
+	}
+	if lines[arr.closeLine].plain != `  "a": [1, 2],` {
+		t.Errorf("array close line = %q", lines[arr.closeLine].plain)
+	}
+	root := containers[0]
+	if root.closeComma {
+		t.Error("root close should not be flagged as followed by a comma")
+	}
+}
+
 func TestLexInvalidJSON(t *testing.T) {
 	// Unbalanced/invalid text still lexes without panic.
 	lines, _ := lexDocument(splitLines(`{ "a": 1, "b": `))
@@ -92,6 +143,31 @@ func mustDecode(t *testing.T, input string) interface{} {
 		t.Fatalf("DecodeJSON: %v", err)
 	}
 	return data
+}
+
+// TestEnterEditClearsFolds verifies that entering edit mode disables
+// folding: every line becomes visible so edit lines map 1:1 onto the
+// document text (no fold placeholders interfering with the cursor).
+func TestEnterEditClearsFolds(t *testing.T) {
+	v := newTestViewer(t, sampleJSON)
+	v.collapseAll()
+	if len(v.visible) != 1 {
+		t.Fatalf("collapseAll visible = %d, want 1", len(v.visible))
+	}
+	v.cursor = 0
+	v.enterEdit(0)
+	if !v.editing {
+		t.Fatal("expected editing mode")
+	}
+	if len(v.folded) != 0 {
+		t.Errorf("fold state should be cleared on edit entry, got %d entries", len(v.folded))
+	}
+	if len(v.visible) != len(v.textLines) {
+		t.Errorf("visible = %d, want all %d lines visible while editing", len(v.visible), len(v.textLines))
+	}
+	if v.editLine != 0 {
+		t.Errorf("editLine = %d, want 0 (folded root line)", v.editLine)
+	}
 }
 
 func TestFoldVisibility(t *testing.T) {
