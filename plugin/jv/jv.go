@@ -67,6 +67,7 @@ func (j *Jv) Run(args []string) error {
 		toClip   bool
 		pipeData string
 		hasPipe  bool
+		literal  string
 	)
 
 	mode = "interactive" // default
@@ -117,6 +118,10 @@ func (j *Jv) Run(args []string) error {
 		case "-h", "-help", "--help":
 			j.printHelp()
 			return nil
+		default:
+			if !strings.HasPrefix(arg, "-") && literal == "" {
+				literal = arg
+			}
 		}
 	}
 
@@ -144,6 +149,9 @@ func (j *Jv) Run(args []string) error {
 		}
 		inputData = data
 		source = url
+	case literal != "":
+		inputData = literal
+		source = "argument"
 	default:
 		// Read from clipboard
 		content, err := clipboard.ReadAll()
@@ -265,6 +273,7 @@ func (j *Jv) printHelp() {
 	color.Printf("<fg=cyan;op=bold>jv - JSON Viewer & Formatter v%s</>\n\n", j.version)
 	color.Println("<fg=magenta;op=bold>Usage:</>")
 	color.Println("  v jv [flags]           Read from clipboard (default)")
+	color.Println("  v jv [flags] '<json>'  Read inline JSON/text")
 	color.Println("  v jv <green>-file</> <path>      Read from file")
 	color.Println("  echo '{...}' | v jv    Read from pipe/stdin")
 	color.Println()
@@ -280,7 +289,7 @@ func (j *Jv) printHelp() {
 	color.Println("  <green>-raw</>    Disable colored output (with -f)")
 	color.Println()
 	color.Println("<gray>I/O: -pipe (auto) · -file <path> · -url <url> · -clip · -out <path> · -copy · -h</>")
-	color.Println("<gray>     Priority: pipe > -file > -url > clipboard</>")
+	color.Println("<gray>     Priority: pipe > -file > -url > argument > clipboard</>")
 	color.Println()
 	color.Println("<gray>Non-JSON input is opened as plain editable text.</>")
 	color.Println("<gray>Press ? inside the viewer for the full key reference.</>")

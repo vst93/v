@@ -30,8 +30,6 @@ var (
 	stPunct  = tcell.StyleDefault
 
 	stGutter     = tcell.StyleDefault.Foreground(tcell.ColorGray)
-	stCurLineBg  = tcell.ColorSilver
-	stCurGutter  = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(stCurLineBg).Bold(true)
 	stFoldPill   = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorGray)
 	stMatch      = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorYellow)
 	stMatchCur   = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorOrange)
@@ -322,6 +320,11 @@ type Viewer struct {
 	hitRects   []hitRect
 	filterRect rect
 	actionRect []actionRect
+
+	// Theme-dependent cursor-line styles. The foreground stays at the
+	// terminal default so it remains readable on both light and dark themes.
+	curLineBg tcell.Color
+	curGutter tcell.Style
 }
 
 type hitRect struct {
@@ -344,12 +347,15 @@ func splitLines(text string) []string {
 // newViewer builds a Viewer from raw input text. Valid JSON is
 // pretty-printed; anything else is shown as plain text.
 func newViewer(app *tview.Application, input, source string, sortKeys bool) *Viewer {
+	curLineBg, curGutter := cursorLineStyles(os.Getenv("COLORFGBG"))
 	v := &Viewer{
-		Box:    tview.NewBox().SetBackgroundColor(tcell.ColorDefault),
-		app:    app,
-		source: source,
-		folded: make(map[int]bool),
-		byLine: make(map[int][]searchMatch),
+		Box:       tview.NewBox().SetBackgroundColor(tcell.ColorDefault),
+		app:       app,
+		source:    source,
+		folded:    make(map[int]bool),
+		byLine:    make(map[int][]searchMatch),
+		curLineBg: curLineBg,
+		curGutter: curGutter,
 	}
 	tree, err := DecodeJSON(input)
 	if err == nil {
@@ -551,7 +557,7 @@ func (v *Viewer) drawLine(s tcell.Screen, x, row, width, full int, isCur bool) {
 
 	rowBase := tcell.StyleDefault
 	if isCur {
-		rowBase = rowBase.Background(stCurLineBg)
+		rowBase = rowBase.Background(v.curLineBg)
 	}
 	for i := 0; i < width; i++ {
 		s.SetContent(x+i, row, ' ', nil, rowBase)
@@ -560,7 +566,7 @@ func (v *Viewer) drawLine(s tcell.Screen, x, row, width, full int, isCur bool) {
 	// Gutter: fold chevron + right-aligned line number.
 	gutStyle := stGutter
 	if isCur {
-		gutStyle = stCurGutter
+		gutStyle = v.curGutter
 	}
 	folded := ln.kind == kindOpen && v.folded[full]
 	// In edit mode folding is disabled, so no fold indicators are drawn.
@@ -625,7 +631,7 @@ func (v *Viewer) drawLine(s tcell.Screen, x, row, width, full int, isCur bool) {
 	for _, sg := range ln.segs {
 		st := styleForClass(sg.cls)
 		if isCur {
-			st = st.Background(stCurLineBg)
+			st = st.Background(v.curLineBg)
 		}
 		for _, r := range sg.text {
 			rst := st
@@ -654,7 +660,7 @@ func (v *Viewer) drawLine(s tcell.Screen, x, row, width, full int, isCur bool) {
 		}
 		st := stPunct
 		if isCur {
-			st = st.Background(stCurLineBg)
+			st = st.Background(v.curLineBg)
 		}
 		c := &v.containers[ln.openID]
 		for _, r := range c.closeText {
@@ -829,6 +835,10 @@ func (v *Viewer) drawSearchPanel(s tcell.Screen, x, y, w int) {
 	for i := 0; i < sw; i++ {
 		s.SetContent(px+i, y, ' ', nil, stPanel)
 	}
+	if sw < 24 {
+		v.drawCompactSearchPanel(s, px, y, sw)
+		return
+	}
 
 	count := ""
 	if v.matchErr != "" {
@@ -901,6 +911,29 @@ func (v *Viewer) drawSearchPanel(s tcell.Screen, x, y, w int) {
 		cx = tx
 	}
 	v.hitRects = append(v.hitRects, hitRect{r: v.inputRect, id: "input"})
+}
+
+// drawCompactSearchPanel keeps the search field usable without drawing the
+// option and navigation buttons outside a narrow terminal viewport.
+func (v *Viewer) drawCompactSearchPanel(s tcell.Screen, x, y, width int) {
+	cx := x + 1
+	s.SetContent(cx, y, '>', nil, stPanelDim)
+	cx += 2
+	inputW := width - 7 // left prompt, gap, right gap, and [x]
+	if inputW < 1 {
+		inputW = 1
+	}
+	v.inputRect = rect{cx, y, inputW, 1}
+	v.searchInput.draw(s, v.inputRect, stPanel, "Search", stPanelDim)
+	v.hitRects = append(v.hitRects, hitRect{r: v.inputRect, id: "input"})
+
+	closeX := x + width - 3
+	ccx := closeX
+	for _, ch := range "[×]" {
+		s.SetContent(ccx, y, ch, nil, stPanel)
+		ccx += cellWidth(ch)
+	}
+	v.hitRects = append(v.hitRects, hitRect{r: rect{closeX, y, 3, 1}, id: "close"})
 }
 
 // drawHelp renders the centered help overlay.

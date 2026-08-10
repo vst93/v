@@ -211,6 +211,9 @@ $ v jv -f
 # Compress (minify) JSON
 $ v jv -c
 
+# Inline JSON/text as a positional argument
+$ v jv -f '{"name":"jv"}'
+
 # Read from file
 $ v jv -file data.json
 
@@ -236,6 +239,8 @@ $ cat data.json | v jv
 `jv` keeps its short mode letters for historical reasons — note that here `-c`
 means *compress*, not *copy*. Use `-copy` to copy. Writing to `-out` or `-copy`
 always produces plain text, never ANSI colors.
+
+Input priority: pipe > `-file` > `-url` > positional argument > clipboard.
 
 Non-JSON input opens as plain editable text without formatting. Editing the text back
 into valid JSON automatically re-enables folding, path lookup and minified copy.

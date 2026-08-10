@@ -479,6 +479,38 @@ func TestDrawSmoke(t *testing.T) {
 	}
 }
 
+func TestCompactSearchPanelStaysInsideViewport(t *testing.T) {
+	s := tcell.NewSimulationScreen("UTF-8")
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Fini()
+	s.SetSize(16, 6)
+
+	v := newViewer(nil, sampleJSON, "test", false)
+	v.searchOpen = true
+	v.SetRect(0, 0, 16, 6)
+	v.Draw(s)
+
+	for _, r := range append(v.hitRects, hitRect{r: v.inputRect}) {
+		if r.r.x < 0 || r.r.x+r.r.w > 16 {
+			t.Errorf("search hit area %+v exceeds 16-column viewport", r.r)
+		}
+	}
+	foundClose := false
+	for _, r := range v.hitRects {
+		if r.id == "close" {
+			foundClose = true
+		}
+	}
+	if !foundClose {
+		t.Error("compact search panel has no close button")
+	}
+	if ch, _, _, _ := s.GetContent(15, 0); ch != ']' {
+		t.Errorf("compact search closing cell = %q, want ']'", ch)
+	}
+}
+
 func TestSelectionShiftArrows(t *testing.T) {
 	v := newTestViewer(t, `{"a":1}`)
 	v.cursor = 1
