@@ -1,21 +1,127 @@
+name: Release
+
 on:
-  release:
-    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 0.0.14). Leave empty to bump patch from current.'
+        required: false
+        default: ''
+      notes:
+        description: 'Release notes. Leave empty to auto-generate from commits.'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark as pre-release (true/false)'
+        required: false
+        default: 'false'
 
 permissions:
   contents: write
-  packages: write
 
 env:
   BINARY_PREFIX: "v"
   GO_VERSION: "1.24.3"
 
 jobs:
+  # ── Compute version, create tag, create release ───────────────────────────
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      notes: ${{ steps.notes.outputs.notes }}
+      prerelease: ${{ steps.prerelease.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        run: |
+          CURRENT=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+          CURRENT="${CURRENT#v}"
+          INPUT="${{ inputs.version }}"
+          if [ -n "$INPUT" ]; then
+            VERSION="$INPUT"
+          else
+            BASE_VERSION="${CURRENT%%-*}"
+            MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
+            MINOR=$(echo "$BASE_VERSION" | cut -d. -f2)
+            PATCH=$(echo "$BASE_VERSION" | cut -d. -f3)
+            PATCH=$((10#$PATCH + 1))
+            VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Current: $CURRENT -> New: $VERSION"
+
+      - name: Determine prerelease
+        id: prerelease
+        run: |
+          PRERELEASE="${{ inputs.prerelease }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          # Auto-detect prerelease from version string (-alpha/-beta/-preview/-rc)
+          if echo "$VERSION" | grep -qiE '-(alpha|beta|preview|rc)'; then
+            PRERELEASE="true"
+          fi
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        id: notes
+        env:
+          INPUT_NOTES: ${{ inputs.notes }}
+        run: |
+          if [ -n "$INPUT_NOTES" ]; then
+            NOTES="$INPUT_NOTES"
+          else
+            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [ -n "$LAST_TAG" ]; then
+              COMMITS=$(git log "$LAST_TAG..HEAD" --pretty=format:"- %s" --no-merges)
+            else
+              COMMITS=$(git log --pretty=format:"- %s" --no-merges -20)
+            fi
+            NOTES=$(printf '## Changes\n\n%s\n\n---\n\n## Install\n\nDownload `v-<os>-<arch>.zip` for your platform and put the `v` binary on your PATH.\n' "$COMMITS")
+          fi
+          NOTES="${NOTES//'%'/'%25'}"
+          NOTES="${NOTES//$'\n'/'%0A'}"
+          NOTES="${NOTES//$'\r'/'%0D'}"
+          echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+
+      - name: Tag and push (no v prefix)
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f "$VERSION"
+          git push origin "$VERSION"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ steps.notes.outputs.notes }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PRERELEASE="${{ steps.prerelease.outputs.prerelease }}"
+          # Decode the percent-encoded notes back to real newlines
+          NOTES=$(printf '%b' "${NOTES//%/\\x}")
+          EXTRA_ARGS=""
+          if [ "$PRERELEASE" = "true" ]; then
+            EXTRA_ARGS="--prerelease"
+          fi
+          gh release create "$VERSION" \
+            --title "v $VERSION" \
+            --notes "$NOTES" \
+            --target main \
+            $EXTRA_ARGS
+
   test:
     name: Vet & test
     runs-on: ubuntu-latest
+    needs: prepare
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.version }}
       - name: Setup Go environment
         uses: actions/setup-go@v6
         with:
@@ -27,9 +133,9 @@ jobs:
         run: go test ./...
 
   build:
-    name: Build binary CI
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
     runs-on: ubuntu-latest
-    needs: test
+    needs: prepare
     strategy:
       matrix:
         goos: [linux, windows, darwin, android]
@@ -41,6 +147,8 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.version }}
       - name: Setup Go environment
         uses: actions/setup-go@v6
         with:
@@ -50,16 +158,9 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
-
-          # Software version = release tag with any leading "v" stripped.
-          VERSION="${RELEASE_TAG#v}"
-          if [ -z "$VERSION" ]; then
-            echo "::error::release tag is empty, cannot determine version"
-            exit 1
-          fi
           echo "Building version $VERSION for $GOOS/$GOARCH"
 
           BINARY_SUFFIX=""
@@ -88,9 +189,8 @@ jobs:
           zip "$BINARY_PREFIX-$GOOS-$GOARCH.zip" "$BINARY_NAME"
           sha256sum "$BINARY_PREFIX-$GOOS-$GOARCH.zip" | awk '{printf $1}' > "$BINARY_PREFIX-$GOOS-$GOARCH.zip.sha256"
       - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
+        uses: softprops/action-gh-release@v2
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: output/${{ env.BINARY_PREFIX }}*.zip*
-          overwrite: true
-          file_glob: true
+          tag_name: ${{ needs.prepare.outputs.version }}
+          files: output/${{ env.BINARY_PREFIX }}*.zip*
+          fail_on_unmatched_files: false
