@@ -26,12 +26,14 @@ func main() {
 		args = append(args, string(bytes))
 	}
 
-	// Command aliases (short forms)
-	aliases := map[string]string{
-		"gp":  "genpwd",
-		"gc":  "gencm",
-		"cc":  "codec",
-		"enc": "codec", // former name, kept so existing habits keep working
+	// Command aliases come from each plugin's GetAliases().
+	plugins := service.Plugin{}
+	pluginList := plugins.List()
+	aliases := map[string]string{}
+	for _, p := range pluginList {
+		for _, alias := range p.GetAliases() {
+			aliases[alias] = p.GetCommand()
+		}
 	}
 	if real, ok := aliases[firstArg]; ok {
 		firstArg = real
@@ -46,9 +48,7 @@ func main() {
 		return
 	}
 
-	plugins := service.Plugin{}
-
-	for _, plugin := range plugins.List() {
+	for _, plugin := range pluginList {
 		if plugin.GetCommand() == firstArg {
 			err = plugin.Run(args[1:])
 			if err != nil {

@@ -49,6 +49,8 @@ func (t *Tr) GetAuthor() string {
 	return t.author
 }
 
+func (t *Tr) GetAliases() []string { return nil }
+
 func (t *Tr) Run(args []string) error {
 	text := strings.Join(args, " ")
 	text = strings.TrimSpace(text)

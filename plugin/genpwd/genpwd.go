@@ -170,6 +170,7 @@ func (g *Genpwd) GetDescription() string     { return g.description }
 func (g *Genpwd) GetCommand() string         { return g.command }
 func (g *Genpwd) GetArgs() map[string]string { return g.args }
 func (g *Genpwd) GetAuthor() string          { return g.author }
+func (g *Genpwd) GetAliases() []string       { return []string{"gp"} }
 func (g *Genpwd) Stop() error                { return nil }
 
 func (g *Genpwd) Run(args []string) error {

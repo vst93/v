@@ -39,6 +39,7 @@ func (c *Cp) GetDescription() string     { return c.description }
 func (c *Cp) GetCommand() string         { return c.command }
 func (c *Cp) GetArgs() map[string]string { return c.args }
 func (c *Cp) GetAuthor() string          { return c.author }
+func (c *Cp) GetAliases() []string       { return nil }
 func (c *Cp) Stop() error                { return nil }
 
 func (c *Cp) Run(args []string) error {

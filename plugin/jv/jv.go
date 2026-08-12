@@ -52,6 +52,7 @@ func (j *Jv) GetDescription() string     { return j.description }
 func (j *Jv) GetCommand() string         { return j.command }
 func (j *Jv) GetArgs() map[string]string { return j.args }
 func (j *Jv) GetAuthor() string          { return j.author }
+func (j *Jv) GetAliases() []string       { return nil }
 
 func (j *Jv) Stop() error { return nil }
 

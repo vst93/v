@@ -38,6 +38,10 @@ func Help() string {
 		out.WriteString(color.New(color.FgGreen).Sprint(info.Version))
 		out.WriteString(" ")
 		out.WriteString(color.New(color.FgDarkGray).Sprint("👤 ") + color.New(color.FgBlue).Sprint(info.Author))
+		if aliases := plugin.GetAliases(); len(aliases) > 0 {
+			out.WriteString("  ")
+			out.WriteString(color.New(color.FgMagenta).Sprint("(aliases: " + strings.Join(aliases, ", ") + ")"))
+		}
 		out.WriteString("\n")
 
 		out.WriteString(color.New(color.FgWhite).Sprint("  " + info.Description))
@@ -49,8 +53,6 @@ func Help() string {
 	out.WriteString(color.New(color.FgCyan).Sprint("Run "))
 	out.WriteString(color.New(color.FgGreen, color.Bold).Sprint("v <command> -h"))
 	out.WriteString(color.New(color.FgCyan).Sprint(" for detailed help."))
-	out.WriteString("\n")
-	out.WriteString(color.New(color.FgDarkGray).Sprint("Aliases: gp=genpwd  gc=gencm  cc=codec  enc=codec"))
 	out.WriteString("\n")
 
 	result := strings.TrimSpace(out.String())

@@ -68,6 +68,49 @@ $ v pwd
 ✅ Copied to clipboard
 ```
 
+### save2file - Save Text to File
+
+Write text to a new text file. Input defaults to the clipboard and falls back
+through pipe and positional arguments; output defaults to `~/Downloads` with a
+second-level timestamp filename. After saving, the file manager reveals the
+file when the platform supports it. `s2f` is the short form.
+
+```bash
+# Save the clipboard text to ~/Downloads/<timestamp>.txt
+$ v save2file
+
+# Save piped text
+$ echo "hello" | v save2file
+
+# Save text passed as an argument
+$ v save2file "hello world"
+
+# Custom filename and directory
+$ v save2file -name notes.txt -dir ~/notes
+
+# Full custom path
+$ v save2file -out /tmp/note.txt
+```
+
+Reveal behavior: `open -R` on macOS, Explorer's select on Windows, and
+FileManager1 (`dbus`) or `xdg-open` on Linux. Use `-no-reveal` to skip it.
+
+### awake - Prevent System Sleep
+
+Keep the computer awake with a calm full-screen live status display. Press `q`, `Esc`, or
+`Ctrl-C` to exit, or provide `-d` for an automatic timeout.
+
+```bash
+# Keep awake until interrupted
+$ v awake
+
+# Keep awake for 30 minutes
+$ v awake -d 30m
+```
+
+The plugin uses the native mechanism on each platform: `caffeinate` on macOS,
+`systemd-inhibit` on Linux, and `SetThreadExecutionState` on Windows.
+
 ### tt - Timestamp Converter
 
 Provides mutual conversion between timestamps and human-readable dates.
@@ -364,7 +407,7 @@ Input priority: pipe > argument > clipboard.
 
 Encode and decode text using Base64, Base32, URL, Hex, HTML, or Unicode encoding.
 
-**Short command:** `cc` (`v enc` also still works — `codec` is the former `enc`)
+**Short command:** `cc`
 
 ```bash
 # Interactive TUI (no arguments)

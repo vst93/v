@@ -66,6 +66,7 @@ func (p *Vc) GetDescription() string     { return p.description }
 func (p *Vc) GetCommand() string         { return p.command }
 func (p *Vc) GetArgs() map[string]string { return p.args }
 func (p *Vc) GetAuthor() string          { return p.author }
+func (p *Vc) GetAliases() []string       { return nil }
 func (p *Vc) Stop() error                { return nil }
 
 // ---------------------------------------------------------------------------

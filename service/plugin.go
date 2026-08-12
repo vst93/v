@@ -1,6 +1,7 @@
 package service
 
 import (
+	plugin_awake "v/plugin/awake"
 	plugin_codec "v/plugin/codec"
 	plugin_cp "v/plugin/cp"
 	plugin_diff "v/plugin/diff"
@@ -9,6 +10,7 @@ import (
 	plugin_json2excel "v/plugin/json2excel"
 	plugin_jv "v/plugin/jv"
 	plugin_pwd "v/plugin/pwd"
+	plugin_save "v/plugin/save"
 	plugin_translate "v/plugin/translate"
 	plugin_tt "v/plugin/tt"
 	plugin_vc "v/plugin/vc"
@@ -23,6 +25,7 @@ type PluginTemplate interface {
 	GetVersion() string
 	GetDescription() string
 	GetCommand() string
+	GetAliases() []string
 	GetArgs() map[string]string
 	GetAuthor() string
 }
@@ -70,9 +73,11 @@ func (p Plugin) List() []PluginTemplate {
 		&(plugin_gcm.Gcm{}),
 		&(plugin_genpwd.Genpwd{}),
 		&(plugin_pwd.Pwd{}),
+		&(plugin_save.Save{}),
 		&(plugin_tt.TT{}),
 		&(plugin_translate.Tr{}),
 		&(plugin_vc.Vc{}),
+		&(plugin_awake.Awake{}),
 	}
 	for _, v := range list {
 		v.Init()

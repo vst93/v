@@ -42,6 +42,7 @@ func (d *Diff) GetDescription() string     { return d.description }
 func (d *Diff) GetCommand() string         { return d.command }
 func (d *Diff) GetArgs() map[string]string { return d.args }
 func (d *Diff) GetAuthor() string          { return d.author }
+func (d *Diff) GetAliases() []string       { return nil }
 func (d *Diff) Stop() error                { return nil }
 
 func (d *Diff) Run(args []string) error {

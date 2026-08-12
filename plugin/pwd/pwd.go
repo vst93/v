@@ -48,6 +48,8 @@ func (p *Pwd) GetAuthor() string {
 	return p.author
 }
 
+func (p *Pwd) GetAliases() []string { return nil }
+
 func (p *Pwd) Run(args []string) error {
 	for _, arg := range args {
 		switch arg {

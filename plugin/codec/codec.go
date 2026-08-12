@@ -60,6 +60,7 @@ func (c *Codec) GetDescription() string     { return c.description }
 func (c *Codec) GetCommand() string         { return c.command }
 func (c *Codec) GetArgs() map[string]string { return c.args }
 func (c *Codec) GetAuthor() string          { return c.author }
+func (c *Codec) GetAliases() []string       { return []string{"cc"} }
 func (c *Codec) Stop() error                { return nil }
 
 func (c *Codec) Run(args []string) error {
@@ -250,7 +251,7 @@ func (c *Codec) printHelp() {
 	color.Println("<gray>--------------------------------------------------</>")
 	color.Printf("<fg=cyan;op=bold>codec - Encode/Decode Utility v%s</>\n\n", c.version)
 	color.Println("Usage: v codec [mode] [input] [options]")
-	color.Println("<gray>Short command: cc (v enc also still works)</>")
+	color.Println("<gray>Short command: cc</>")
 	color.Println()
 	color.Println("<fg=magenta;op=bold>Modes:</>")
 	color.Println("  <green>-b64</>    Base64 encode      <green>-b64d</>   Base64 decode")

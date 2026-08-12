@@ -16,7 +16,7 @@ stdin/pipe ──► main.go ──► service.Plugin{}.List() ──► matched
                   │
                   ├─ setting.InitSetting()  (~/.v_tools/settings.ini)
                   ├─ pipe detection          (appends `-pipe <data>` to args)
-                  ├─ alias map {"gp":"genpwd", "gc":"gencm", "cc":"codec", "enc":"codec"}
+                  ├─ aliases (from plugins' GetAliases): gp, gc, cc, j2e, s2f
                   ├─ -h/-help/--help ──► service.Help()
                   └─ -v/-version/--version ──► service.VVersion
 ```
@@ -26,7 +26,7 @@ stdin/pipe ──► main.go ──► service.Plugin{}.List() ──► matched
 2. L17-20 `args := os.Args[1:]`; if empty, defaults to `["-h"]`.
 3. L21 `firstArg := args[0]` is the command name.
 4. L22-27 **Pipe detection**: `os.Stdin.Stat()`; if `ModeNamedPipe`, reads all stdin and **appends** `["-pipe", string(bytes)]` to the *end* of `args` (after the subcommand). Plugins scan `args` for `-pipe` by index.
-5. **Aliases**: `gp` → `genpwd`, `gc` → `gencm`, `cc` → `codec`, `enc` → `codec` (former name).
+5. **Aliases**: built from each plugin's `GetAliases()`; currently `gp` → `genpwd`, `gc` → `gencm`, `cc` → `codec`, `j2e` → `json2excel`, `s2f` → `save2file`.
 6. `-h`/`-help`/`--help` → `service.Help()`; `-v`/`-version`/`--version` → `service.VVersion`.
 7. Iterates `service.Plugin{}.List()` (which calls `Init()` on every plugin), matches `plugin.GetCommand() == firstArg`, then `plugin.Run(args[1:])`. Unknown commands print a hint pointing at `v -h`. `defer plugin.Stop()` runs per match.
 
@@ -35,20 +35,23 @@ stdin/pipe ──► main.go ──► service.Plugin{}.List() ──► matched
 - `PluginInfo` struct L27-35; `Plugin` struct L36; `GetInfo` L38; `Info` L49.
 - `List()` L60 (value receiver) — constructs the slice, calls `Init()` on each at L71-73, returns. `Init()` is effectively the constructor.
 
-**Registered plugins** (`service/plugin.go` import block, `List()` body) - all 10 are registered:
+**Registered plugins** (`service/plugin.go` import block, `List()` body) - all 13 are registered:
 
 | Command | Plugin struct | Alias | Purpose |
 |---|---|---|---|
-| `v json2excel` | `Json2Excel` | — | JSON → .xlsx/CSV with dot-path key drill + flatten |
+| `v json2excel` | `Json2Excel` | `j2e` | JSON → .xlsx/CSV with dot-path key drill + flatten |
 | `v jv` | `Jv` | — | JSON viewer/formatter + interactive TUI tree (default mode) |
 | `v diff` | `Diff` | — | Side-by-side text diff (Myers) with inline word highlighting |
-| `v codec` | `Codec` | `cc`, `enc` | Encode/decode base64, base32, url, hex, html, unicode + TUI |
+| `v codec` | `Codec` | `cc` | Encode/decode base64, base32, url, hex, html, unicode + TUI |
 | `v cp` | `Cp` | — | Copy text to clipboard (pipe-friendly, with trim options) |
 | `v gencm` | `Gcm` | `gc` | AI commit message from git diff via OpenAI-compatible API |
 | `v genpwd` | `Genpwd` | `gp` | CSPRNG password generator with interactive TUI |
 | `v pwd` | `Pwd` | — | Print cwd + copy to clipboard |
+| `v save2file` | `Save` | `s2f` | Save clipboard/pipe/arg text to a timestamped file and reveal it |
 | `v tt` | `TT` | — | Unix timestamp ↔ date string conversion |
 | `v tr` | `Tr` | — | Translate via Google + CNKI; Youdao word lookup |
+| `v vc` | `Vc` | — | v-connection: multi-device text sharing via a channel |
+| `v awake` | `Awake` | — | Keep the system awake with a live status display |
 
 `plugin/template/` is a **copy-paste scaffold only** — NOT imported, NOT registered.
 

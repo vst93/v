@@ -65,6 +65,8 @@ func (t *Template) GetAuthor() string {
 	return t.author
 }
 
+func (t *Template) GetAliases() []string { return nil }
+
 func (t *Template) Run(args []string) error {
 	var (
 		pipeData string

@@ -53,6 +53,8 @@ func (j *Json2Excel) GetAuthor() string {
 	return j.author
 }
 
+func (j *Json2Excel) GetAliases() []string { return []string{"j2e"} }
+
 func (j *Json2Excel) Run(args []string) error {
 	inputPath := ""
 	outputPath := ""

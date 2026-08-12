@@ -48,6 +48,8 @@ func (t *TT) GetAuthor() string {
 	return t.author
 }
 
+func (t *TT) GetAliases() []string { return nil }
+
 func (t *TT) Run(args []string) error {
 	if len(args) == 0 {
 		// print now timesteamp

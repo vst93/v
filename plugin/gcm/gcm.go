@@ -83,6 +83,7 @@ func (g *Gcm) GetDescription() string     { return g.description }
 func (g *Gcm) GetCommand() string         { return g.command }
 func (g *Gcm) GetArgs() map[string]string { return g.args }
 func (g *Gcm) GetAuthor() string          { return g.author }
+func (g *Gcm) GetAliases() []string       { return []string{"gc"} }
 func (g *Gcm) Stop() error                { return nil }
 
 func (g *Gcm) Run(args []string) error {
