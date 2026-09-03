@@ -73,6 +73,7 @@ v/
 │   ├── translate/          # tr.go + cnki.go (AES-ECB) + youdao.go
 │   ├── genpwd/             # genpwd.go (crypto/rand + Fisher-Yates) + viewer.go (TUI form)
 │   ├── jv/                 # jv.go + viewer.go (~2585-line TUI) + lexer.go + filter.go + format.go + orderedmap.go + clipboard.go
+│   ├── internal/theme/     # shared TUI theme: light/dark detection (OSC 11, COLORFGBG, V_THEME) + semantic palette
 │   ├── diff/               # diff.go + myers.go (Myers from scratch) + viewer.go + paste.go
 │   ├── cp/                 # cp.go — copy to clipboard, pipe-first
 │   ├── codec/              # codec.go (12 codec modes) + viewer.go (tview List/TextArea TUI)
@@ -228,10 +229,18 @@ Pipe data arrives as a trailing `-pipe <data>` pair; plugins read it as a value 
 Three parallel styling mechanisms — pick by context:
 - `gookit/color` - `service/help.go` (main help) and every plugin's `printHelp()` (tag-based: `<fg=cyan;op=bold>` title, `<fg=magenta;op=bold>` section headers, `<green>` flags, `<gray>` I/O notes). `genpwd.go` also uses `color.Green.Sprint` for output. `jv/format.go` defines reusable `color.New(...)` styles (`colorKey` FgCyan, `colorString` FgGreen, `colorNumber` FgYellow, `colorBool` FgMagenta, `colorNull` FgRed+Bold, `colorPunct` FgDarkGray, `colorIndex`/`colorBracket` FgBlue).
 - Raw ANSI `\033[...m` — `diff.go` (`printInline`) and `translate/tr.go` (color consts L33-46). Older code; avoid for new TUI output.
-- tview `[color]` tags + `tcell.StyleDefault.Foreground(...)` — the TUI viewers (`jv/viewer.go`, `diff/viewer.go`, `genpwd/viewer.go`).
+- tview `[color]` tags + `tcell.StyleDefault.Foreground(...)` — the TUI viewers (`jv/viewer.go`, `diff/viewer.go`, `genpwd/viewer.go`). All four TUI plugins resolve colors through `internal/theme` (see "Terminal theme standard" below) instead of hardcoding them.
 
 ### TUI stack
 `github.com/gdamore/tcell/v2` (low-level screen/input) + `github.com/rivo/tview` (widgets). **Every TUI must call `EnableMouse(true)`** on the application — mouse and touch input both arrive as mouse events, so skipping it silently disables both. `jv/viewer.go` is a custom `Viewer` embedding `*tview.Box` with manual `Draw` and a hand-written `MouseHandler` (~2585 lines). `diff/viewer.go` uses dual `tview.TextView` side-by-side. `genpwd/viewer.go` uses a `tview.Flex` form. `codec/viewer.go` composes stock widgets (`tview.List` for the selectors, `tview.TextArea` for input, `tview.Button` for actions) precisely so that click/tap/drag/wheel come from tview rather than being reimplemented — prefer this approach for new TUIs. `TextArea.SetClipboard(...)` must be wired to `atotto/clipboard` or copy/paste stays local to the widget.
+
+### Terminal theme standard (`internal/theme`)
+All TUI plugins must adapt to light and dark terminals via `internal/theme`:
+1. At TUI startup (before creating any widget): `theme.Init(true)` (enables the live OSC 11 background probe on unix; falls back to `COLORFGBG`, then dark), then `theme.ApplyTView()` for tview-based plugins so stock widgets stop assuming a black terminal.
+2. Take colors from `theme.Current()` / `theme.For(light)` semantic slots (`Text`, `TextDim`, `Accent`/`AccentFg`, `Success`/`Warn`/`Error`/`Info`, `Border`, `FieldBg`/`FieldFg`, `SelBg`/`SelFg`, `PanelBg`, `CursorLineBg`, `MatchBg`…). For tview dynamic tags use `"[" + theme.Hex(c) + "]"`.
+3. Never hardcode theme-sensitive colors (black/white backgrounds, near-white text). Colors that carry the same meaning in both themes (red error, yellow match highlight) may stay literal.
+4. Manual-draw viewers (like `jv`) map palette slots onto local style vars in one `applyTheme(light bool)` function.
+5. Detection: `V_THEME=light|dark` (alias `JV_THEME`) > OSC 11 probe (only when `Init(true)`) > `COLORFGBG` > dark. Tests never touch the terminal — they pass `false` or call `theme.For(light)` directly.
 
 ### Strings
 - `strings.Builder` for all loop concatenation (`help.go`, `jv/format.go`, `diff/myers.go`, `diff/viewer.go`).

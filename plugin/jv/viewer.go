@@ -17,6 +17,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/rivo/uniseg"
+
+	"v/internal/theme"
 )
 
 // Syntax and UI styles. Plain ANSI palette colors are used so the viewer
@@ -35,11 +37,17 @@ var (
 	stMatchCur   = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorOrange)
 	stScrollTrak = tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
 	stScrollThum = tcell.StyleDefault.Foreground(tcell.ColorGray)
-	stSelection  = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorNavy)
+	// stSelection, stPanel*, stBox* are theme-aware: applyTheme swaps them
+	// between the dark variants below and light counterparts (see theme.go).
+	stSelection = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorNavy)
 
 	stPanel    = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorDarkSlateGray)
 	stPanelDim = tcell.StyleDefault.Foreground(tcell.ColorGray).Background(tcell.ColorDarkSlateGray)
 	stPanelOn  = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorSilver).Bold(true)
+
+	stBox      = tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorDarkSlateGray)
+	stBoxKey   = tcell.StyleDefault.Foreground(tcell.ColorTeal).Background(tcell.ColorDarkSlateGray).Bold(true)
+	stBoxTitle = tcell.StyleDefault.Foreground(tcell.ColorYellow).Background(tcell.ColorDarkSlateGray).Bold(true)
 
 	stBarLabel = tcell.StyleDefault.Foreground(tcell.ColorTeal).Bold(true)
 	stBarDim   = tcell.StyleDefault.Foreground(tcell.ColorGray)
@@ -347,7 +355,9 @@ func splitLines(text string) []string {
 // newViewer builds a Viewer from raw input text. Valid JSON is
 // pretty-printed; anything else is shown as plain text.
 func newViewer(app *tview.Application, input, source string, sortKeys bool) *Viewer {
-	curLineBg, curGutter := cursorLineStyles(os.Getenv("COLORFGBG"))
+	light := theme.Light()
+	applyTheme(light)
+	curLineBg, curGutter := cursorLineStyles(light)
 	v := &Viewer{
 		Box:       tview.NewBox().SetBackgroundColor(tcell.ColorDefault),
 		app:       app,
@@ -394,6 +404,7 @@ func jsonErrLine(text string, err error) int {
 
 // RunInteractive launches the interactive editor-style viewer.
 func RunInteractive(input, source string, sortKeys bool) error {
+	theme.Init(true) // resolve the terminal theme (with OSC 11 probe) before drawing
 	app := tview.NewApplication()
 	v := newViewer(app, input, source, sortKeys)
 	return app.SetRoot(v, true).EnableMouse(true).Run()
@@ -971,10 +982,6 @@ func (v *Viewer) drawHelp(s tcell.Screen, x, y, w, h int) {
 	}
 	bx := x + (w-bw)/2
 	by := y + (h-bh)/2
-
-	stBox := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorDarkSlateGray)
-	stBoxKey := tcell.StyleDefault.Foreground(tcell.ColorTeal).Background(tcell.ColorDarkSlateGray).Bold(true)
-	stBoxTitle := tcell.StyleDefault.Foreground(tcell.ColorYellow).Background(tcell.ColorDarkSlateGray).Bold(true)
 
 	for row := 0; row < bh; row++ {
 		for col := 0; col < bw; col++ {

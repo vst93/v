@@ -7,6 +7,8 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"v/internal/theme"
 )
 
 // codecSpec is one entry in the Codec list: a display label plus the two
@@ -42,10 +44,16 @@ const sidebarWidth = 18
 // column to a row above the editor, so nothing gets clipped.
 const narrowCols = 64
 
-var accentColor = tcell.NewRGBColor(46, 204, 113)
-
 type codecTUI struct {
 	app *tview.Application
+
+	// theme-derived colors, resolved once at startup.
+	accent       tcell.Color
+	accentFg     tcell.Color
+	dim          tcell.Color
+	errColor     tcell.Color
+	warnColor    tcell.Color
+	successColor tcell.Color
 
 	codecList *tview.List
 	modeList  *tview.List
@@ -71,7 +79,18 @@ type codecTUI struct {
 
 // runTUI launches the interactive encoder. seed pre-fills the input area.
 func runTUI(seed string) error {
-	ui := &codecTUI{app: tview.NewApplication()}
+	theme.Init(true)
+	theme.ApplyTView() // stock widgets must not assume a black terminal
+	p := theme.Current()
+	ui := &codecTUI{
+		app:          tview.NewApplication(),
+		accent:       p.Accent,
+		accentFg:     p.AccentFg,
+		dim:          p.TextDim,
+		errColor:     p.Error,
+		warnColor:    p.Warn,
+		successColor: p.Success,
+	}
 
 	ui.buildWidgets()
 	ui.buildLayout(false)
@@ -109,8 +128,8 @@ func (ui *codecTUI) buildWidgets() {
 	ui.codecList = tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedStyle(tcell.StyleDefault.Background(accentColor).Foreground(tcell.ColorBlack).Bold(true)).
-		SetShortcutColor(tcell.ColorDarkGray)
+		SetSelectedStyle(tcell.StyleDefault.Background(ui.accent).Foreground(ui.accentFg).Bold(true)).
+		SetShortcutColor(ui.dim)
 	for _, c := range codecs {
 		ui.codecList.AddItem(c.label, "", c.shortcut, nil)
 	}
@@ -122,8 +141,8 @@ func (ui *codecTUI) buildWidgets() {
 	ui.modeList = tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedStyle(tcell.StyleDefault.Background(accentColor).Foreground(tcell.ColorBlack).Bold(true)).
-		SetShortcutColor(tcell.ColorDarkGray)
+		SetSelectedStyle(tcell.StyleDefault.Background(ui.accent).Foreground(ui.accentFg).Bold(true)).
+		SetShortcutColor(ui.dim)
 	ui.modeList.AddItem("Encode", "", 'e', nil)
 	ui.modeList.AddItem("Decode", "", 'd', nil)
 	ui.modeList.SetCurrentItem(dirDecode)
@@ -262,17 +281,17 @@ func (ui *codecTUI) refreshBorders() {
 	for _, p := range []*tview.Box{
 		ui.codecList.Box, ui.modeList.Box, ui.input.Box, ui.output.Box,
 	} {
-		p.SetBorderColor(tcell.ColorGray)
+		p.SetBorderColor(ui.dim)
 	}
 	switch ui.focusRing[ui.focusIdx] {
 	case ui.codecList:
-		ui.codecList.SetBorderColor(accentColor)
+		ui.codecList.SetBorderColor(ui.accent)
 	case ui.modeList:
-		ui.modeList.SetBorderColor(accentColor)
+		ui.modeList.SetBorderColor(ui.accent)
 	case ui.input:
-		ui.input.SetBorderColor(accentColor)
+		ui.input.SetBorderColor(ui.accent)
 	case ui.output:
-		ui.output.SetBorderColor(accentColor)
+		ui.output.SetBorderColor(ui.accent)
 	}
 }
 
@@ -303,7 +322,7 @@ func (ui *codecTUI) transform() {
 		ui.outputText = ""
 		// Show the reason in place rather than flashing the status bar, so it
 		// is obvious why the output is empty.
-		ui.output.SetText(fmt.Sprintf("[red]%s[-]", tview.Escape(err.Error())))
+		ui.output.SetText(fmt.Sprintf("[%s]%s[-]", theme.Hex(ui.errColor), tview.Escape(err.Error())))
 		ui.output.SetTitle(" Output ")
 		ui.refreshStatus("")
 		return
@@ -317,14 +336,14 @@ func (ui *codecTUI) transform() {
 
 func (ui *codecTUI) copyOutput() {
 	if ui.outputText == "" {
-		ui.refreshStatus("[yellow]nothing to copy[-]")
+		ui.refreshStatus(fmt.Sprintf("[%s]nothing to copy[-]", theme.Hex(ui.warnColor)))
 		return
 	}
 	if err := clipboard.WriteAll(ui.outputText); err != nil {
-		ui.refreshStatus("[red]clipboard write failed[-]")
+		ui.refreshStatus(fmt.Sprintf("[%s]clipboard write failed[-]", theme.Hex(ui.errColor)))
 		return
 	}
-	ui.refreshStatus("[green]✅ copied to clipboard[-]")
+	ui.refreshStatus(fmt.Sprintf("[%s]✅ copied to clipboard[-]", theme.Hex(ui.successColor)))
 }
 
 // swap feeds the output back in as the new input and flips encode/decode, so
@@ -353,7 +372,8 @@ func (ui *codecTUI) refreshStatus(toast string) {
 		dir = "Decode"
 	}
 	ui.status.SetText(fmt.Sprintf(
-		"[yellow]Tab[-] focus  [yellow]↑↓[-] select  [yellow]y[-] copy  [yellow]^R[-] swap  [yellow]^L[-] clear  [yellow]Esc[-] quit   [::d]%s %s  %d→%d[-:-:-]",
+		"[%s]Tab[-] focus  [%s]↑↓[-] select  [%s]y[-] copy  [%s]^R[-] swap  [%s]^L[-] clear  [%s]Esc[-] quit   [::d]%s %s  %d→%d[-:-:-]",
+		theme.Hex(ui.accent), theme.Hex(ui.accent), theme.Hex(ui.accent), theme.Hex(ui.accent), theme.Hex(ui.accent), theme.Hex(ui.accent),
 		codecs[ui.codecList.GetCurrentItem()].label, dir,
 		len(ui.input.GetText()), len(ui.outputText),
 	))

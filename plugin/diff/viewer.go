@@ -7,6 +7,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"v/internal/theme"
 )
 
 // DiffViewer holds the state for the interactive side-by-side diff TUI.
@@ -83,9 +85,9 @@ func (dv *DiffViewer) build(app *tview.Application) *tview.Application {
 	}))
 
 	dv.searchBar = tview.NewInputField().
-		SetLabel("[#ffaa00]Search: [-:-:-]").
-		SetFieldBackgroundColor(tcell.ColorBlack).
-		SetFieldTextColor(tcell.ColorWhite).
+		SetLabel(fmt.Sprintf("[%s]Search: [-:-:-]", theme.Hex(theme.Current().Warn))).
+		SetFieldBackgroundColor(theme.Current().FieldBg).
+		SetFieldTextColor(theme.Current().FieldFg).
 		SetDoneFunc(func(key tcell.Key) {
 			if key == tcell.KeyEnter {
 				term := dv.searchBar.GetText()
@@ -209,6 +211,8 @@ func (dv *DiffViewer) build(app *tview.Application) *tview.Application {
 
 // Run launches the interactive TUI as a standalone application.
 func (dv *DiffViewer) Run() error {
+	theme.Init(true) // paste mode reuses this app via build(nil), already themed
+	theme.ApplyTView()
 	app := dv.build(nil)
 	return app.SetRoot(dv.rootLayout, true).EnableMouse(true).Run()
 }
@@ -280,7 +284,7 @@ func vSeparator() *tview.TextView {
 	s := tview.NewTextView().
 		SetDynamicColors(true).
 		SetWrap(false)
-	s.SetText("[#3a3a3a]" + strings.Repeat("│\n", 256) + "[-]")
+	s.SetText("[" + theme.Hex(theme.Current().TextDim) + "]" + strings.Repeat("│\n", 256) + "[-]")
 	return s
 }
 
@@ -612,8 +616,11 @@ func (dv *DiffViewer) updateTitles() {
 		}
 	}
 
-	dv.leftTitle.SetText(fmt.Sprintf("[#ff4444::b]◀ %s[-:-:-]  [#555555]- %d del, ~ %d chg[-]", leftName, dels, changes))
-	dv.rightTitle.SetText(fmt.Sprintf("[#44ff44::b]%s ▶[-:-:-]  [#555555]+ %d add, ~ %d chg[-]", rightName, adds, changes))
+	p := theme.Current()
+	dv.leftTitle.SetText(fmt.Sprintf("[%s::b]◀ %s[-:-:-]  [%s]- %d del, ~ %d chg[-]",
+		theme.Hex(p.Error), leftName, theme.Hex(p.TextDim), dels, changes))
+	dv.rightTitle.SetText(fmt.Sprintf("[%s::b]%s ▶[-:-:-]  [%s]+ %d add, ~ %d chg[-]",
+		theme.Hex(p.Success), rightName, theme.Hex(p.TextDim), adds, changes))
 }
 
 func (dv *DiffViewer) updateStatusBar() {

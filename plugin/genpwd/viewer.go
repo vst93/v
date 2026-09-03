@@ -7,6 +7,8 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"v/internal/theme"
 )
 
 // Preset password lengths for the slider.
@@ -14,6 +16,9 @@ var presetLengths = []int{8, 12, 16, 20, 24, 32, 48, 64}
 
 // PasswordUI is the interactive password generator TUI.
 type PasswordUI struct {
+	// c is the active theme palette, set at Run() start.
+	c theme.Palette
+
 	app       *tview.Application
 	config    PasswordConfig
 	pwd       string
@@ -56,6 +61,9 @@ func NewPasswordUI(config PasswordConfig) *PasswordUI {
 }
 
 func (ui *PasswordUI) Run() error {
+	theme.Init(true)
+	theme.ApplyTView() // stock widgets must not assume a black terminal
+	ui.c = theme.Current()
 	ui.app = tview.NewApplication()
 
 	// Generate initial password
@@ -205,9 +213,9 @@ func (ui *PasswordUI) Run() error {
 				return nil
 			case 'y':
 				if err := clipboard.WriteAll(ui.pwd); err != nil {
-					ui.status.SetText(fmt.Sprintf("[#ff5555]✗ Clipboard error: %s[-]", err))
+					ui.status.SetText(fmt.Sprintf("[%s]✗ Clipboard error: %s[-]", theme.Hex(ui.c.Error), err))
 				} else {
-					ui.status.SetText("[#50fa7b]✅ Copied to clipboard[-]")
+					ui.status.SetText(fmt.Sprintf("[%s]✅ Copied to clipboard[-]", theme.Hex(ui.c.Success)))
 				}
 				return nil
 			case 'q':
@@ -322,17 +330,17 @@ func (ui *PasswordUI) refreshPreview() {
 	for _, ch := range ui.pwd {
 		switch {
 		case ch >= 'a' && ch <= 'z':
-			sb.WriteString(fmt.Sprintf("[#f8f8f2]%c[-]", ch))
+			sb.WriteString(fmt.Sprintf(ui.tag(ui.c.Text)+"%c[-]", ch))
 		case ch >= 'A' && ch <= 'Z':
-			sb.WriteString(fmt.Sprintf("[#8be9fd::b]%c[-:-:-]", ch))
+			sb.WriteString(fmt.Sprintf(ui.tagB(ui.c.Info)+"%c[-:-:-]", ch))
 		case ch >= '0' && ch <= '9':
-			sb.WriteString(fmt.Sprintf("[#50fa7b]%c[-]", ch))
+			sb.WriteString(fmt.Sprintf(ui.tag(ui.c.Success)+"%c[-]", ch))
 		default:
-			sb.WriteString(fmt.Sprintf("[#f1fa8c]%c[-]", ch))
+			sb.WriteString(fmt.Sprintf(ui.tag(ui.c.Warn)+"%c[-]", ch))
 		}
 	}
 	sb.WriteString("\n\n")
-	sb.WriteString(fmt.Sprintf("[#6272a4]%d chars | %.1f bits entropy[-]", ui.config.Length, ui.config.Entropy()))
+	sb.WriteString(fmt.Sprintf(ui.tag(ui.c.TextDim)+"%d chars | %.1f bits entropy[-]", ui.config.Length, ui.config.Entropy()))
 	fmt.Fprint(ui.preview, sb.String())
 }
 
@@ -345,7 +353,7 @@ func (ui *PasswordUI) refreshForm(form *tview.TextView) {
 		selected := i == ui.focus
 		cursor := "  "
 		if selected {
-			cursor = "[#50fa7b::b]▶ [-:-:-]"
+			cursor = ui.tagB(ui.c.Success) + "▶ [-:-:-]"
 		}
 
 		switch i {
@@ -363,21 +371,21 @@ func (ui *PasswordUI) refreshForm(form *tview.TextView) {
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString(fmt.Sprintf("[#6272a4]Charset: %d characters | Entropy: %.1f bits[-]\n",
+	sb.WriteString(fmt.Sprintf(ui.tag(ui.c.TextDim)+"Charset: %d characters | Entropy: %.1f bits[-]\n",
 		ui.config.CharsetSize(), ui.config.Entropy()))
 
-	strengthLabel, strengthColor := passwordStrength(ui.config.Entropy())
-	sb.WriteString(fmt.Sprintf("[#6272a4]Strength: [%s]%s[-][-]", strengthColor, strengthLabel))
+	strengthLabel, strengthTag := passwordStrength(ui)
+	sb.WriteString(fmt.Sprintf(ui.tag(ui.c.TextDim)+"Strength: %s%s[-][-]", strengthTag, strengthLabel))
 
 	fmt.Fprint(form, sb.String())
 }
 
 // writeLengthSlider renders the length selection as a horizontal slider with preset stops.
 func (ui *PasswordUI) writeLengthSlider(sb *strings.Builder, cursor string, selected bool) {
-	labelColor := "[#f8f8f2]"
+	labelColor := ui.tag(ui.c.Text)
 	endTag := "[-]"
 	if selected {
-		labelColor = "[#f8f8f2::b]"
+		labelColor = ui.tagB(ui.c.Text)
 		endTag = "[-:-:-]"
 	}
 
@@ -385,63 +393,71 @@ func (ui *PasswordUI) writeLengthSlider(sb *strings.Builder, cursor string, sele
 	var bar strings.Builder
 	for i, l := range presetLengths {
 		if i == ui.lengthIdx {
-			bar.WriteString(fmt.Sprintf("[#50fa7b::b][%d][-:-:-]", l))
+			bar.WriteString(fmt.Sprintf(ui.tagB(ui.c.Success)+"[%d][-:-:-]", l))
 		} else {
-			bar.WriteString(fmt.Sprintf("[#6272a4] %d [-]", l))
+			bar.WriteString(fmt.Sprintf(ui.tag(ui.c.TextDim)+" %d [-]", l))
 		}
 		if i < len(presetLengths)-1 {
-			bar.WriteString("[#6272a4]─[-]")
+			bar.WriteString(ui.tag(ui.c.TextDim) + "─[-]")
 		}
 	}
 
 	// If custom length, show it separately
 	customNote := ""
 	if ui.lengthIdx < 0 {
-		customNote = fmt.Sprintf("  [#ffb86c](custom: %d)[-]", ui.config.Length)
+		customNote = fmt.Sprintf("  "+ui.tag(ui.c.Warn)+"(custom: %d)[-]", ui.config.Length)
 	}
 
 	sb.WriteString(fmt.Sprintf("%s%sLength:%s  %s%s\n", cursor, labelColor, endTag, bar.String(), customNote))
-	sb.WriteString(fmt.Sprintf("  [#6272a4]← → preset | Enter for custom[-]\n"))
+	sb.WriteString("  " + ui.tag(ui.c.TextDim) + "← → preset | Enter for custom[-]\n")
 }
 
 func (ui *PasswordUI) writeCheckbox(sb *strings.Builder, cursor string, selected bool, label string, checked bool, example string) {
-	check := "[#ff5555]☐[-]"
+	check := ui.tag(ui.c.Error) + "☐[-]"
 	if checked {
-		check = "[#50fa7b]☑[-]"
+		check = ui.tag(ui.c.Success) + "☑[-]"
 	}
-	labelColor := "[#f8f8f2]"
+	labelColor := ui.tag(ui.c.Text)
 	endTag := "[-]"
 	if selected {
-		labelColor = "[#f8f8f2::b]"
+		labelColor = ui.tagB(ui.c.Text)
 		endTag = "[-:-:-]"
 	}
-	sb.WriteString(fmt.Sprintf("%s%s %s%s%s [#6272a4]%s[-]\n", cursor, check, labelColor, label, endTag, example))
+	sb.WriteString(fmt.Sprintf("%s%s %s%s%s %s%s[-]\n", cursor, check, labelColor, label, endTag, ui.tag(ui.c.TextDim), example))
 }
 
 func (ui *PasswordUI) refreshStatus() {
-	ui.status.SetText("[#6272a4]Press r to regenerate | y to copy[-]")
+	ui.status.SetText(ui.tag(ui.c.TextDim) + "Press r to regenerate | y to copy[-]")
 }
 
 func (ui *PasswordUI) refreshHelp() {
 	if ui.focus == 0 {
-		ui.helpBar.SetText("[#888888]← → Adjust length   Enter Custom length   Space Next   Tab/↑↓ Navigate   r Regenerate   y Copy   q Quit[-]")
+		ui.helpBar.SetText(ui.tag(ui.c.TextDim) + "← → Adjust length   Enter Custom length   Space Next   Tab/↑↓ Navigate   r Regenerate   y Copy   q Quit[-]")
 	} else {
-		ui.helpBar.SetText("[#888888]Space Toggle   Tab/↑↓ Navigate   r Regenerate   y Copy   q Quit[-]")
+		ui.helpBar.SetText(ui.tag(ui.c.TextDim) + "Space Toggle   Tab/↑↓ Navigate   r Regenerate   y Copy   q Quit[-]")
 	}
 }
 
-func passwordStrength(entropy float64) (string, string) {
+// tag wraps a color as a tview dynamic-color tag prefix.
+func (ui *PasswordUI) tag(c tcell.Color) string { return "[" + theme.Hex(c) + "]" }
+
+// tagB is tag() plus bold.
+func (ui *PasswordUI) tagB(c tcell.Color) string { return "[" + theme.Hex(c) + "::b]" }
+
+// passwordStrength classifies entropy and returns the label with a ready
+// tview color tag (bold for the top tier).
+func passwordStrength(ui *PasswordUI) (string, string) {
 	switch {
-	case entropy < 28:
-		return "Very Weak", "#ff5555"
-	case entropy < 36:
-		return "Weak", "#ff6655"
-	case entropy < 60:
-		return "Fair", "#ffb86c"
-	case entropy < 128:
-		return "Strong", "#50fa7b"
+	case ui.config.Entropy() < 28:
+		return "Very Weak", ui.tag(ui.c.Error)
+	case ui.config.Entropy() < 36:
+		return "Weak", ui.tag(ui.c.Error)
+	case ui.config.Entropy() < 60:
+		return "Fair", ui.tag(ui.c.Warn)
+	case ui.config.Entropy() < 128:
+		return "Strong", ui.tag(ui.c.Success)
 	default:
-		return "Very Strong", "#50fa7b::b"
+		return "Very Strong", ui.tagB(ui.c.Success)
 	}
 }
 

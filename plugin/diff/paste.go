@@ -6,6 +6,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"v/internal/theme"
 )
 
 // PasteViewer is the input-mode TUI: the user pastes left/right text into two
@@ -30,6 +32,8 @@ func NewPasteViewer() *PasteViewer {
 
 // Run launches the paste-mode TUI as a standalone application.
 func (pv *PasteViewer) Run() error {
+	theme.Init(true)
+	theme.ApplyTView()
 	pv.app = tview.NewApplication()
 	pv.buildInput()
 	pv.app.SetInputCapture(pv.inputCapture)
@@ -99,8 +103,11 @@ func (pv *PasteViewer) refreshInputStatus() {
 	lLines := lineCount(pv.leftArea.GetText())
 	rLines := lineCount(pv.rightArea.GetText())
 
-	pv.leftTitle.SetText(fmt.Sprintf("[#ff4444::b]◀ Left (paste)[-:-:-]  [#555555]L: %d lines[-]", lLines))
-	pv.rightTitle.SetText(fmt.Sprintf("[#44ff44::b]Right (paste) ▶[-:-:-]  [#555555]R: %d lines[-]", rLines))
+	p := theme.Current()
+	pv.leftTitle.SetText(fmt.Sprintf("[%s::b]◀ Left (paste)[-:-:-]  [%s]L: %d lines[-]",
+		theme.Hex(p.Error), theme.Hex(p.TextDim), lLines))
+	pv.rightTitle.SetText(fmt.Sprintf("[%s::b]Right (paste) ▶[-:-:-]  [%s]R: %d lines[-]",
+		theme.Hex(p.Success), theme.Hex(p.TextDim), rLines))
 
 	pv.statusBar.SetText(fmt.Sprintf(" [%s]Paste · L %d ln · R %d ln[-]", colorBarMain, lLines, rLines))
 }
@@ -151,7 +158,7 @@ func (pv *PasteViewer) computeDiff() {
 	rightText := strings.TrimSpace(pv.rightArea.GetText())
 
 	if leftText == "" && rightText == "" {
-		pv.statusBar.SetText("[#ff4444]Both sides are empty — paste some text first.[-:-:-]")
+		pv.statusBar.SetText(fmt.Sprintf("[%s]Both sides are empty — paste some text first.[-:-:-]", theme.Hex(theme.Current().Error)))
 		return
 	}
 

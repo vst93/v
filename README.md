@@ -283,7 +283,23 @@ $ cat data.json | v jv
 means *compress*, not *copy*. Use `-copy` to copy. Writing to `-out` or `-copy`
 always produces plain text, never ANSI colors.
 
+The interactive viewer adapts to light and dark terminal themes: it queries
+the terminal directly (OSC 11; supported by VS Code, iTerm2, Alacritty, kitty,
+WezTerm, …) and falls back to `COLORFGBG`. It picks matching cursor-line,
+selection, panel and help-box colors. If detection fails on your terminal,
+force a theme with `V_THEME=light` or `V_THEME=dark`.
+
 Input priority: pipe > `-file` > `-url` > positional argument > clipboard.
+
+### Terminal theme (all TUI plugins)
+
+The interactive TUIs (`jv`, `codec`, `diff`, `genpwd`) share a theme engine
+(`internal/theme`): they detect a light vs dark terminal — OSC 11 query first
+(VS Code, iTerm2, Alacritty, kitty, WezTerm, …), `COLORFGBG` as fallback,
+`V_THEME=light|dark` as a manual override — and pick matching accent,
+panel, selection and status colors. New plugin TUIs should call
+`theme.Init(true)` + `theme.ApplyTView()` at startup and take colors from
+`theme.Current()` instead of hardcoding them.
 
 Non-JSON input opens as plain editable text without formatting. Editing the text back
 into valid JSON automatically re-enables folding, path lookup and minified copy.
