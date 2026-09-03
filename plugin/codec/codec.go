@@ -170,7 +170,7 @@ func (c *Codec) Run(args []string) error {
 	default:
 		clip, err := clipboard.ReadAll()
 		if err != nil || clip == "" {
-			return fmt.Errorf("no input provided: use -file, -pipe, pass text as argument, or copy to clipboard")
+			return fmt.Errorf("no input provided\nUse: -file <path>, -pipe, pass text as argument, or copy to clipboard first")
 		}
 		inputData = clip
 	}
@@ -184,7 +184,7 @@ func (c *Codec) Run(args []string) error {
 		if err := os.WriteFile(expandHome(outPath), []byte(result+"\n"), 0o644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", outPath, err)
 		}
-		fmt.Printf("✅ Written to %s\n", outPath)
+		fmt.Printf("✅ Written to %s (%d bytes)\n", outPath, len(result))
 	} else {
 		fmt.Println(result)
 	}
@@ -249,25 +249,43 @@ func doTransform(mode, input string) (string, error) {
 
 func (c *Codec) printHelp() {
 	color.Println("<gray>--------------------------------------------------</>")
-	color.Printf("<fg=cyan;op=bold>codec - Encode/Decode Utility v%s</>\n\n", c.version)
-	color.Println("Usage: v codec [mode] [input] [options]")
-	color.Println("<gray>Short command: cc</>")
+	color.Printf("<fg=cyan;op=bold>codec - Encode/Decode Utility v%s</> <gray>(alias: cc)</>\n\n", c.version)
+	color.Println("Encode and decode text using Base64, Base32, URL, Hex, HTML, or Unicode.")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Usage:</>")
+	color.Println("  v codec                    Interactive TUI (default)")
+	color.Println("  v codec <green>-b64</> <text>       Encode with specified mode")
+	color.Println("  echo <text> | v codec <green>-b64</>  Pipe input")
 	color.Println()
 	color.Println("<fg=magenta;op=bold>Modes:</>")
-	color.Println("  <green>-b64</>    Base64 encode      <green>-b64d</>   Base64 decode")
-	color.Println("  <green>-b32</>    Base32 encode      <green>-b32d</>   Base32 decode")
-	color.Println("  <green>-url</>    URL encode         <green>-urld</>   URL decode")
-	color.Println("  <green>-hex</>    Hex encode         <green>-hexd</>   Hex decode")
-	color.Println("  <green>-html</>   HTML escape        <green>-htmld</>  HTML unescape")
-	color.Println("  <green>-uni</>    Unicode escape     <green>-unid</>   Unicode unescape")
+	color.Println("  <green>-b64</>      Base64 encode      <green>-b64d</>     Base64 decode")
+	color.Println("  <green>-b32</>      Base32 encode      <green>-b32d</>     Base32 decode")
+	color.Println("  <green>-url</>      URL encode         <green>-urld</>     URL decode")
+	color.Println("  <green>-hex</>      Hex encode         <green>-hexd</>     Hex decode")
+	color.Println("  <green>-html</>     HTML escape        <green>-htmld</>    HTML unescape")
+	color.Println("  <green>-uni</>      Unicode escape     <green>-unid</>     Unicode unescape")
 	color.Println()
-	color.Println("<gray>I/O: -pipe (auto) · -file <path> · -clip · -out <path> · -copy · -tui · -h</>")
-	color.Println("<gray>     No mode launches the interactive TUI.</>")
+	color.Println("<fg=magenta;op=bold>Options:</>")
+	color.Println("  <green>-file</> <path>  Read from file")
+	color.Println("  <green>-clip</>         Read from clipboard")
+	color.Println("  <green>-pipe</>         Read from pipe/stdin (auto-detected)")
+	color.Println("  <green>-out</> <path>   Write result to file")
+	color.Println("  <green>-copy</>         Copy result to clipboard")
+	color.Println("  <green>-tui</>          Force interactive TUI mode")
+	color.Println("  <green>-h</>            Show this help")
 	color.Println()
 	color.Println("<fg=magenta;op=bold>Examples:</>")
+	color.Println(`  <gray># Encode text</>`)
 	color.Println(`  v codec <green>-b64</> "Hello World"`)
-	color.Println(`  echo "Hello" | v codec <green>-b64</> <green>-copy</>`)
-	color.Println(`  v codec <green>-b64d</> "SGVsbG8gV29ybGQ="`)
+	color.Println()
+	color.Println(`  <gray># Decode and copy to clipboard</>`)
+	color.Println(`  echo "SGVsbG8=" | v codec <green>-b64d</> <green>-copy</>`)
+	color.Println()
+	color.Println(`  <gray># Interactive TUI</>`)
+	color.Println(`  v codec`)
+	color.Println()
+	color.Println("<gray>Input priority: pipe > -file > argument > clipboard</>")
+	color.Println("<gray>TUI: Tab/↑↓ navigate · 1-6 quick select · e/d encode/decode · y copy · Ctrl-R swap · q quit</>")
 	color.Println("<gray>--------------------------------------------------</>")
 }
 

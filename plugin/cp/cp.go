@@ -111,14 +111,13 @@ func (c *Cp) Run(args []string) error {
 		return fmt.Errorf("failed to copy to clipboard: %w", err)
 	}
 
-	fmt.Println("✅ Copied to clipboard")
+	fmt.Printf("✅ Copied to clipboard (%d bytes)\n", len(input))
 	return nil
 }
 
 func (c *Cp) printHelp() {
 	color.Println("<gray>--------------------------------------------------</>")
-	color.Println("<fg=cyan;op=bold>📦 cp - Copy to Clipboard</>")
-	color.Println()
+	color.Printf("<fg=cyan;op=bold>cp - Copy to Clipboard v%s</>\n\n", c.version)
 	color.Println("Copy text to clipboard. Designed for pipe mode to chain with other commands.")
 	color.Println()
 	color.Println("<fg=magenta;op=bold>Usage:</>")
@@ -127,11 +126,25 @@ func (c *Cp) printHelp() {
 	color.Println(`  echo "  hi  " | v cp <green>-trim</>      Trim whitespace then copy`)
 	color.Println()
 	color.Println("<fg=magenta;op=bold>Options:</>")
-	color.Println("  <green>-trim</>   Trim leading & trailing whitespace (spaces, tabs, newlines)")
-	color.Println("  <green>-triml</>  Trim leading whitespace only")
-	color.Println("  <green>-trimr</>  Trim trailing whitespace only")
-	color.Println("  <green>-h</>      Show this help")
+	color.Println("  <green>-trim</>          Trim leading & trailing whitespace (spaces, tabs, newlines)")
+	color.Println("  <green>-triml</>         Trim leading whitespace only")
+	color.Println("  <green>-trimr</>         Trim trailing whitespace only")
+	color.Println("  <green>-pipe</>          Read from pipe/stdin (auto-detected)")
+	color.Println("  <green>-h</>             Show this help")
+	color.Println()
+	color.Println("<fg=magenta;op=bold>Examples:</>")
+	color.Println("  <gray># Chain with other commands</>")
+	color.Println("  cat file.txt | grep \"error\" | v cp")
+	color.Println()
+	color.Println("  <gray># Trim whitespace before copying</>")
+	color.Println(`  printf "  \n  Hello  \n  " | v cp <green>-trim</>`)
+	color.Println("  <gray># Result: \"Hello\" (trimmed on both sides)</>")
+	color.Println()
+	color.Println("  <gray># Copy with selective trimming</>")
+	color.Println(`  echo "  hello  " | v cp <green>-triml</>   <gray># copies "hello  "</>`)
+	color.Println(`  echo "  hello  " | v cp <green>-trimr</>   <gray># copies "  hello"</>`)
 	color.Println()
 	color.Println("<gray>Input priority: pipe > argument > clipboard</>")
+	color.Println("<gray>Perfect for terminal workflows: filter, transform, then copy the result</>")
 	color.Println("<gray>--------------------------------------------------</>")
 }

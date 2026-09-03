@@ -2,6 +2,7 @@ package service
 
 import (
 	plugin_awake "v/plugin/awake"
+	plugin_calc "v/plugin/calc"
 	plugin_codec "v/plugin/codec"
 	plugin_cp "v/plugin/cp"
 	plugin_diff "v/plugin/diff"
@@ -78,6 +79,7 @@ func (p Plugin) List() []PluginTemplate {
 		&(plugin_translate.Tr{}),
 		&(plugin_vc.Vc{}),
 		&(plugin_awake.Awake{}),
+		&(plugin_calc.Calc{}),
 	}
 	for _, v := range list {
 		v.Init()
