@@ -169,25 +169,56 @@ Inline JSON is passed as a positional argument. Input priority: pipe > `-file` >
 
 ### tr - Text Translator
 
-Translate text using Google Translate or CNKI (requires internet connection).
+Translate between Chinese and English using Youdao, Google Translate and CNKI (requires
+internet). Text containing Chinese defaults to English; other text defaults to
+Chinese. Use `-to en` or `-to zh` to choose the translation target for mixed-language
+text. Youdao first looks up Chinese-English or English-Chinese entries, including
+phrases, definitions and pronunciation. If a phrase is not in its dictionary,
+Youdao's separate translation endpoint translates it to the selected language.
 
 ```bash
-# Translate text
+# English → Chinese
 $ v tr 'Hello World'
-你好，世界
 
-# Enable/Disable Google Translate
-$ v -enable-google
-Google Translate enabled
-$ v -disable-google
-Google Translate disabled
+# Chinese → English
+$ v tr '你好世界'
 
-# Enable/Disable CNKI Translate
-$ v -enable-cnki
-CNKI Translate enabled
-$ v -disable-cnki
-CNKI Translate disabled
+# Choose the target language
+$ v tr -to zh 'Go is fast，适合 CLI'
+
+# Translate piped text; print only the translation
+$ echo '你好世界' | v tr -raw
+Hello World
+
+# Read the clipboard and copy the translation back
+$ v tr -clip -copy
+
+# Enable/disable translation engines (saved in ~/.v_tools/settings.ini)
+$ v tr -enable-google
+$ v tr -disable-google
+$ v tr -enable-cnki
+$ v tr -disable-cnki
 ```
+
+| Option | Description |
+|--------|-------------|
+| `-to en\|zh` | Target for Google, CNKI and Youdao translation; dictionary lookup auto-detects |
+| `-clip` | Read input from the clipboard |
+| `-raw` | Print only the first successful result to arrive, without colors |
+| `-copy` | Copy the first successful translation to the clipboard |
+| `-h` | Show help (also `-help` / `--help`) |
+
+Input priority: pipe > positional text > `-clip`. Youdao starts first, with CNKI
+and Google running concurrently. Terminal output always displays **Youdao → CNKI →
+Google**: each enabled engine has its own loading animation, replaced in place as
+soon as its result arrives. The colored headings, numbered definitions and brief
+errors remain. Redirected output prints the complete results once in that order,
+without loading animations. Long results are shown in full when loading finishes.
+`-raw` and `-copy` use the first successful result to arrive, including Youdao
+translations or definitions. A failed engine does not discard another engine's
+successful result. Youdao automatically falls back to translation when its
+dictionary has no entry, keeping the same loading indicator and result position.
+Request failures use short messages without network details.
 
 ### genpwd - Random Password Generator
 
@@ -509,6 +540,83 @@ Conversion is live — the output updates as you type. Decode errors appear in t
 output box instead of clearing it silently. Below 64 columns the Codec/Mode
 column moves above the editor so nothing gets clipped.
 
+### qr - QR Code Generator
+
+Generate a QR code from text or a URL. By default, print a compact QR code in
+the terminal. Use `-terminal` to display an image inside the terminal,
+`-image` to preview a PNG with the system image viewer, or
+`-save` to save it to the system Downloads directory. `qrcode` is an alias.
+
+```bash
+# Print a QR code in the terminal
+$ v qr "https://example.com"
+
+# Encode pipe input without adding a trailing newline
+$ printf '%s' '你好，世界' | v qr
+
+# Open a PNG in the default image viewer
+$ v qr "hello" -image
+
+# Display an image inside the terminal
+$ v qr "hello" -terminal
+
+# Display inside the terminal and also save to Downloads
+$ v qr "hello" -terminal -save
+
+# Save a PNG to Downloads (unique qr_<date>_<time>_<suffix>.png filename)
+$ v qr "hello" -save
+
+# Save and preview a 512×512 PNG
+$ v qr "hello" -save -image -size 512
+
+# Encode a text file and write a PNG to a custom path
+$ v qr -file text.txt -out ./qr.png
+
+# Encode clipboard text
+$ v qr -clip
+```
+
+| Option | Description |
+|--------|-------------|
+| `-terminal` | Display an image inside a supported terminal; fall back to a text QR |
+| `-protocol <name>` | `auto` (default), `iterm2`, `kitty`, or `text`; implies `-terminal` |
+| `-image` | Preview a PNG using the system image viewer |
+| `-save` | Save a PNG to the system Downloads directory |
+| `-out <path>` | Save a PNG to this path; overrides the destination of `-save` |
+| `-size <px>` | PNG width and height (default 256, maximum 4096; must fit the QR code) |
+| `-file <path>` | Read text from a file (`~` supported) |
+| `-clip` | Read clipboard text (also the default without input) |
+| `-pipe` | Read pipe/stdin text (auto-detected) |
+| `-raw` | Print the terminal QR without ANSI colors |
+| `-h`, `-help`, `--help` | Show help |
+
+Input priority: pipe > file > positional text > clipboard. Text is encoded
+verbatim, including whitespace and newlines. Pass URLs as text to encode the
+URL itself. All images are PNGs with a white quiet zone and medium error
+correction. `-size` only affects PNG output.
+
+Terminal images use the iTerm2 protocol in iTerm2, WezTerm, and VS Code, and the
+Kitty protocol in Kitty and Ghostty. In VS Code, enable
+`"terminal.integrated.enableImages": true` in settings. Detection uses terminal
+environment variables; if image support is disabled in a recognized terminal,
+enable it or use `-protocol text`. Other compatible terminals can explicitly
+select `-protocol iterm2` or `-protocol kitty`. Apple Terminal and unrecognized
+terminals fall back to the character QR. `-raw` and redirected stdout always
+use text instead of image control sequences.
+
+`-terminal` sends the image directly without creating a file. `-size` sets its
+pixel dimensions (default 256); add `-save` or `-out` to keep a PNG as well.
+tmux and GNU Screen use text in auto mode. For tmux image passthrough, enable
+`set -g allow-passthrough on` and explicitly choose the outer terminal's protocol.
+
+Preview alone creates a temporary PNG that remains in the system temp directory
+so the viewer can read it after the command exits. Combine `-image` with `-save`
+or `-out` to preview the saved file. Preview requires a desktop image viewer
+(`open` on macOS, `rundll32` on Windows, `xdg-open` on Linux, or `termux-open`
+on Android). Saving works without a desktop. The Downloads destination defaults
+to `~/Downloads`, respects Linux's XDG download directory, and uses Termux's
+`~/storage/downloads` when available on Android.
+
 ### vc - v-connection
 
 Multi-device text sharing via a channel. Create a channel, share the
@@ -691,6 +799,7 @@ v/
 │   ├── diff/            # Side-by-side diff viewer
 │   ├── cp/              # Copy to clipboard (pipe-friendly)
 │   ├── codec/           # Encode/Decode utility (base64, url, hex, html, unicode)
+│   ├── qr/              # Terminal QR codes, PNG preview and export
 │   ├── vc/              # v-connection: multi-device text sharing
 │   └── gcm/             # AI commit message generator (command: gencm)
 └── setting/

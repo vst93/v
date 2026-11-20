@@ -11,6 +11,7 @@ import (
 	plugin_json2excel "v/plugin/json2excel"
 	plugin_jv "v/plugin/jv"
 	plugin_pwd "v/plugin/pwd"
+	plugin_qr "v/plugin/qr"
 	plugin_save "v/plugin/save"
 	plugin_translate "v/plugin/translate"
 	plugin_tt "v/plugin/tt"
@@ -73,6 +74,7 @@ func (p Plugin) List() []PluginTemplate {
 		&(plugin_cp.Cp{}),
 		&(plugin_gcm.Gcm{}),
 		&(plugin_genpwd.Genpwd{}),
+		&(plugin_qr.QR{}),
 		&(plugin_pwd.Pwd{}),
 		&(plugin_save.Save{}),
 		&(plugin_tt.TT{}),
